@@ -1,5 +1,3 @@
-toml
-
 [build]
   publish = "."
   functions = "netlify/functions"
@@ -7,4 +5,5 @@ toml
 [[headers]]
   for = "/*"
   [headers.values]
+
     Cache-Control = "public, max-age=3600"
