@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HarvestScope</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --green:#39e07a; --yellow:#f5c842; --orange:#f57c42; --red:#f5424e;
+  --panel-bg:rgba(4,9,18,0.94); --border:rgba(255,255,255,0.10);
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans-serif; background:#050e1c; }
+
+/* ── MAP fills everything ── */
+#map { position:absolute; inset:0; z-index:0; }
+
+/* Scanline broadcast feel */
+#map::after {
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:500;
+  background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.025) 2px,rgba(0,0,0,0.025) 3px);
+}
+
+/* Darken satellite tiles so neon pins pop */
+.leaflet-tile-pane { filter: brightness(0.55) saturate(0.8); }
+
+/* ── PRODUCE PIN markers ── */
+.pin {
+  display:flex; flex-direction:column; align-items:center; gap:3px;
+  cursor:pointer; transition:transform .15s;
+}
+.pin:hover { transform:scale(1.1); }
+.pin-bubble {
+  width:52px; height:52px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:23px;
+  position:relative; border:2.5px solid; backdrop-filter:blur(6px);
+}
+.g0,.g1,.g2,.g3 { /* colors now set via inline style by wxGlowStyle() */ }
+.gx { background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.18); }
+.pin-pulse {
+  position:absolute; inset:-3px; border-radius:50%; pointer-events:none;
+  animation:ppulse 2.4s ease infinite;
+}
+@keyframes ppulse { 0%{transform:scale(1);opacity:.55} 70%{transform:scale(2.3);opacity:0} 100%{transform:scale(2.3);opacity:0} }
+.pin-wx { position:absolute; bottom:-4px; right:-6px; font-size:15px; line-height:1; filter:drop-shadow(0 1px 4px rgba(0,0,0,.9)); }
+.pin-label {
+  background:rgba(4,9,18,.86); border:1px solid rgba(255,255,255,.12);
+  border-radius:8px; padding:2px 8px;
+  display:flex; flex-direction:column; align-items:center;
+  backdrop-filter:blur(10px); min-width:48px;
+}
+.pin-temp { font-family:'Barlow Condensed',sans-serif; font-size:14px; font-weight:800; color:#fff; line-height:1.2; }
+.pin-cond { font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; line-height:1; }
+
+/* ── WEATHER OVERLAY markers ── */
+.wx {
+  display:flex; flex-direction:column; align-items:center; gap:1px;
+  animation:wxin .7s ease both; pointer-events:none;
+}
+@keyframes wxin { from{opacity:0;transform:scale(.5)} to{opacity:1;transform:scale(1)} }
+.wx-ico { font-size:26px; line-height:1; animation:wxbob 3s ease-in-out infinite; }
+@keyframes wxbob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+.wx-tag {
+  font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:800;
+  letter-spacing:1.5px; text-transform:uppercase;
+  background:rgba(4,9,18,.78); border-radius:4px; padding:1px 5px;
+  border:1px solid; white-space:nowrap; backdrop-filter:blur(8px);
+}
+
+/* ── TOP BAR ── */
+#topbar {
+  position:absolute; top:0; left:0; right:0; z-index:800; pointer-events:none;
+  padding:10px 18px; display:flex; align-items:center; justify-content:space-between;
+  background:linear-gradient(to bottom,rgba(4,9,18,.97) 45%,transparent);
+}
+#logo-name { font-family:'Barlow Condensed',sans-serif; font-size:24px; font-weight:900; color:#fff; letter-spacing:1px; }
+#logo-sub  { font-family:'Barlow Condensed',sans-serif; font-size:9px; font-weight:700; letter-spacing:3px; color:var(--green); text-transform:uppercase; }
+#live-badge { display:flex; align-items:center; gap:6px; font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700; letter-spacing:2px; color:var(--green); text-transform:uppercase; }
+.ldot { width:6px; height:6px; border-radius:50%; background:var(--green); animation:blink 1.4s ease infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.15} }
+
+/* ── PICKER ── */
+#picker {
+  position:absolute; bottom:0; left:0; right:0; z-index:800;
+  padding:8px 16px 14px;
+  background:linear-gradient(to top,rgba(4,9,18,.98) 60%,transparent);
+}
+#cat-tabs { display:flex; gap:6px; margin-bottom:7px; }
+.cat-tab {
+  font-family:'Barlow Condensed',sans-serif; font-size:9px; font-weight:800;
+  letter-spacing:2px; text-transform:uppercase; padding:3px 10px; border-radius:100px;
+  border:1.5px solid rgba(255,255,255,.12); background:rgba(255,255,255,.04);
+  color:rgba(255,255,255,.3); cursor:pointer; transition:all .15s;
+}
+.cat-tab:hover { color:rgba(255,255,255,.6); border-color:rgba(255,255,255,.25); }
+.cat-tab.active { border-color:var(--green); background:rgba(57,224,122,.1); color:var(--green); }
+#pills { display:flex; gap:5px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
+#pills::-webkit-scrollbar { display:none; }
+.pill {
+  display:flex; align-items:center; gap:5px; padding:5px 13px; border-radius:100px;
+  border:1.5px solid rgba(255,255,255,.13); background:rgba(255,255,255,.05);
+  color:rgba(255,255,255,.45); font-family:'Barlow Condensed',sans-serif;
+  font-size:13px; font-weight:700; cursor:pointer; transition:all .18s; white-space:nowrap;
+  backdrop-filter:blur(6px); flex-shrink:0;
+}
+.pill:hover  { border-color:rgba(255,255,255,.3); color:rgba(255,255,255,.8); }
+.pill.active { border-color:var(--green); background:rgba(57,224,122,.12); color:#fff; box-shadow:0 0 14px rgba(57,224,122,.2); }
+
+/* ── DETAIL PANEL — right side, compact ── */
+#detail {
+  position:absolute; top:60px; right:14px; z-index:810;
+  width:320px; max-height:calc(100vh - 170px);
+  background:var(--panel-bg); border:1px solid var(--border); border-radius:13px;
+  backdrop-filter:blur(28px); padding:10px 12px; display:none;
+  animation:sup .2s ease; overflow-y:auto;
+}
+@keyframes sup { from{opacity:0;transform:translateX(10px)} to{opacity:1;transform:translateX(0)} }
+#d-close { position:absolute; top:8px; right:10px; font-size:14px; color:rgba(255,255,255,.28); cursor:pointer; background:none; border:none; transition:color .12s; }
+#d-close:hover { color:#fff; }
+#d-top { display:flex; align-items:center; gap:7px; margin-bottom:7px; }
+#d-emoji { font-size:24px; flex-shrink:0; }
+#d-name   { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:900; color:#fff; text-transform:uppercase; line-height:1; }
+#d-region { font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:600; letter-spacing:.5px; color:rgba(255,255,255,.38); margin-top:1px; }
+#d-badge  { margin-left:auto; flex-shrink:0; padding:2px 8px; border-radius:100px; font-family:'Barlow Condensed',sans-serif; font-size:9px; font-weight:800; letter-spacing:1px; text-transform:uppercase; }
+#d-stats  { display:flex; border-top:1px solid var(--border); border-bottom:1px solid var(--border); margin-bottom:7px; }
+.ds { flex:1; padding:5px 6px; border-right:1px solid var(--border); }
+.ds:last-child { border-right:none; }
+.ds-l { font-family:'Barlow Condensed',sans-serif; font-size:7px; font-weight:700; letter-spacing:1.5px; color:rgba(255,255,255,.28); text-transform:uppercase; margin-bottom:1px; }
+.ds-v { font-family:'Barlow Condensed',sans-serif; font-size:16px; font-weight:800; color:#fff; line-height:1; }
+.ds-s { font-size:8px; color:rgba(255,255,255,.32); margin-top:1px; }
+#d-note { font-size:11px; color:rgba(255,255,255,.45); line-height:1.4; margin-bottom:6px; }
+#d-usda { font-family:'Barlow Condensed',sans-serif; font-size:9px; letter-spacing:.4px; margin-bottom:2px; }
+#d-usda a { color:var(--green); text-decoration:none; }
+#d-usda a:hover { text-decoration:underline; }
+
+/* ── SECONDARY REGION PINS — B&W, full opacity, clearly secondary ── */
+.pin-sec {
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  pointer-events:none;
+}
+.pin-sec-bubble {
+  width:38px; height:38px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:16px;
+  background:rgba(255,255,255,.10); border:2px solid rgba(255,255,255,.55);
+  backdrop-filter:blur(4px) grayscale(1);
+  filter:grayscale(1) brightness(0.85);
+  box-shadow:0 0 10px rgba(255,255,255,.15);
+}
+.pin-sec-label {
+  background:rgba(4,9,18,.82); border:1px solid rgba(255,255,255,.18);
+  border-radius:6px; padding:2px 7px;
+  display:flex; flex-direction:column; align-items:center;
+}
+.pin-sec-name  { font-family:'Barlow Condensed',sans-serif; font-size:9px; font-weight:700; color:rgba(255,255,255,.75); line-height:1.2; white-space:nowrap; }
+.pin-sec-share { font-family:'Barlow Condensed',sans-serif; font-size:8px; color:rgba(255,255,255,.4); line-height:1; }
+
+/* ── 5-DAY FORECAST ── */
+#d-forecast { margin-top:9px; border-top:1px solid var(--border); padding-top:9px; }
+.fc-label { font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:700; letter-spacing:2px; color:rgba(255,255,255,.28); text-transform:uppercase; margin-bottom:6px; }
+.fc-days { display:flex; gap:4px; }
+.fc-day {
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.07);
+  border-radius:7px; padding:5px 2px;
+}
+.fc-dow  { font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:700; color:rgba(255,255,255,.35); text-transform:uppercase; letter-spacing:.5px; }
+.fc-ico  { font-size:18px; line-height:1.1; }
+.fc-tmp  { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:800; color:#fff; line-height:1; }
+.fc-bar  { width:100%; height:3px; border-radius:2px; background:rgba(255,255,255,.08); overflow:hidden; margin-top:1px; }
+.fc-bar-fill { height:100%; border-radius:2px; background:#6899e8; transition:width .4s; }
+
+/* ── SEASON CHART ── */
+#d-season { margin-top:9px; border-top:1px solid var(--border); padding-top:9px; }
+.sc-label { font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:700; letter-spacing:2px; color:rgba(255,255,255,.28); text-transform:uppercase; margin-bottom:6px; }
+.sc-wrap { position:relative; height:48px; }
+.sc-bars { display:flex; gap:2px; height:28px; align-items:flex-end; }
+.sc-bar { flex:1; border-radius:2px 2px 0 0; transition:height .3s; }
+.sc-curve { position:absolute; top:0; left:0; right:0; height:28px; pointer-events:none; }
+.sc-months { display:flex; margin-top:3px; }
+.sc-mon { flex:1; font-family:'Barlow Condensed',sans-serif; font-size:7px; font-weight:700; color:rgba(255,255,255,.25); text-align:center; letter-spacing:0; }
+.sc-mon.now { color:var(--green); }
+.leaflet-control-zoom { border:1px solid rgba(255,255,255,.12) !important; background:rgba(4,9,18,.85) !important; }
+.leaflet-control-zoom a { background:transparent !important; color:rgba(255,255,255,.55) !important; border-bottom:1px solid rgba(255,255,255,.1) !important; line-height:26px !important; }
+.leaflet-control-zoom a:hover { color:#fff !important; }
+.leaflet-control-attribution { display:none !important; }
+/* Kill default marker blue dot */
+.leaflet-div-icon { background:none !important; border:none !important; }
+
+/* ══════════════════════════════════════════════════════════
+   MOBILE LAYOUT — bottom drawer panel, single-row pills
+   ══════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Panel becomes bottom drawer */
+  #detail {
+    top: auto !important;
+    bottom: 0 !important;
+    right: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-height: 58vh !important;
+    border-radius: 18px 18px 0 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: none !important;
+    padding: 14px 16px 120px !important;
+    animation: slideup .28s cubic-bezier(.32,1,.4,1) !important;
+  }
+  #detail.closing {
+    animation: slidedown .22s ease-in forwards !important;
+  }
+  @keyframes slideup {
+    from { opacity:0; transform:translateY(100%); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+  @keyframes slidedown {
+    from { opacity:1; transform:translateY(0); }
+    to   { opacity:0; transform:translateY(100%); }
+  }
+
+  /* Drag handle visual hint */
+  #detail::before {
+    content:'';
+    display:block;
+    width:40px; height:4px;
+    background:rgba(255,255,255,.25);
+    border-radius:2px;
+    margin:0 auto 12px;
+  }
+
+  /* Bigger, easier-to-tap close button on mobile */
+  #d-close {
+    top:10px !important;
+    right:12px !important;
+    font-size:18px !important;
+    width:36px !important;
+    height:36px !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    background:rgba(255,255,255,.08) !important;
+    border-radius:50% !important;
+    color:rgba(255,255,255,.6) !important;
+  }
+
+  /* Stats row — 2x2 grid on mobile */
+  #d-stats { flex-wrap:wrap; }
+  .ds { min-width:50%; border-bottom:1px solid var(--border); }
+  .ds:nth-child(2) { border-right:none; }
+  .ds:nth-child(3), .ds:nth-child(4) { border-bottom:none; }
+
+  /* Picker — sits at very bottom, above drawer */
+  #picker { padding:6px 12px 14px; }
+  #cat-tabs { gap:5px; margin-bottom:6px; }
+  .cat-tab { font-size:8px; padding:3px 8px; }
+  #pills { gap:5px; -webkit-overflow-scrolling:touch; }
+  .pill { font-size:12px; padding:4px 11px; }
+
+  /* Top bar tighter */
+  #topbar { padding:8px 14px; }
+  #logo-name { font-size:20px; }
+  #logo-sub  { font-size:8px; letter-spacing:2px; }
+
+  /* Move zoom controls so they don't overlap panel */
+  .leaflet-control-zoom { margin-bottom: 110px !important; }
+
+  /* Season chart slightly taller bars on mobile */
+  .sc-wrap { height:52px; }
+  .sc-bars { height:32px; }
+  .sc-curve { height:32px; }
+}
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div>
+    <div id="logo-name">🌿 HarvestScope</div>
+    <div id="logo-sub">Jeffco Produce Origins &amp; Live Weather</div>
+  </div>
+  <div id="live-badge"><div class="ldot"></div></div>
+</div>
+
+<!-- DETAIL PANEL -->
+<div id="detail">
+  <button id="d-close">✕</button>
+  <div id="d-top">
+    <span id="d-emoji"></span>
+    <div><div id="d-name"></div><div id="d-region"></div></div>
+    <div id="d-badge"></div>
+  </div>
+  <div id="d-stats">
+    <div class="ds"><div class="ds-l">Temp</div><div class="ds-v" id="ds-temp">—</div><div class="ds-s">Current</div></div>
+    <div class="ds"><div class="ds-l">7-Day Rain</div><div class="ds-v" id="ds-rain">—</div><div class="ds-s" id="ds-rain-s"></div></div>
+    <div class="ds"><div class="ds-l">Conditions</div><div class="ds-v" id="ds-cond">—</div><div class="ds-s" id="ds-cond-s"></div></div>
+    <div class="ds"><div class="ds-l">Supply Share</div><div class="ds-v" id="ds-share">—</div><div class="ds-s">of US imports</div></div>
+  </div>
+  <div id="d-note"></div>
+  <div id="d-usda"></div>
+  <div id="d-season"></div>
+  <div id="d-forecast"></div>
+</div>
+
+<!-- PICKER -->
+<div id="picker">
+  <div id="cat-tabs">
+    <button class="cat-tab active" data-cat="all">All</button>
+    <button class="cat-tab" data-cat="fruit">🍓 Fruit</button>
+    <button class="cat-tab" data-cat="veg">🥦 Veg</button>
+  </div>
+  <div id="pills"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════
+//  MAP — Leaflet with dark satellite-style tiles
+//  Centered on Americas, no pan/zoom limits so user can explore
+// ══════════════════════════════════════════════════════════
+const map = L.map('map', {
+  center: [35, -105],  // Western Americas bias — WA down to Chile all visible
+  zoom: 3,
+  zoomControl: false,
+  attributionControl: false,
+});
+L.control.zoom({ position:'topright' }).addTo(map);
+
+// ESRI World Imagery — real satellite photo tiles, no API key needed
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19,
+  attribution: 'Tiles © Esri',
+}).addTo(map);
+
+// ══════════════════════════════════════════════════════════
+//  PRODUCE — one primary sourcing region per item
+// ══════════════════════════════════════════════════════════
+// Inline SVG icons for produce that have no good emoji
+const SVG = {
+  broccolini: `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- stalk -->
+    <rect x="12" y="12" width="2" height="12" fill="#4a8c3f"/>
+    <!-- side branches -->
+    <line x1="13" y1="17" x2="8"  y2="13" stroke="#4a8c3f" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="13" y1="15" x2="18" y2="11" stroke="#4a8c3f" stroke-width="1.5" stroke-linecap="round"/>
+    <!-- florets -->
+    <circle cx="13" cy="7"  r="4"   fill="#2d7a2a"/>
+    <circle cx="8"  cy="11" r="3"   fill="#2d7a2a"/>
+    <circle cx="18" cy="9"  r="3"   fill="#2d7a2a"/>
+    <circle cx="10" cy="7"  r="2.5" fill="#3a8c36"/>
+    <circle cx="16" cy="7"  r="2.5" fill="#3a8c36"/>
+  </svg>`,
+
+  asparagus: `<img src="data:image/png;base64,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" width="36" height="36" style="object-fit:contain">`,
+
+  green_onion: `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- white bulb -->
+    <ellipse cx="13" cy="22" rx="5" ry="3.5" fill="#e8ede0" stroke="#c8d4b8" stroke-width="0.8"/>
+    <!-- roots -->
+    <line x1="10" y1="24" x2="9"  y2="26" stroke="#c8d4b8" stroke-width="0.8" stroke-linecap="round"/>
+    <line x1="13" y1="25" x2="13" y2="26" stroke="#c8d4b8" stroke-width="0.8" stroke-linecap="round"/>
+    <line x1="16" y1="24" x2="17" y2="26" stroke="#c8d4b8" stroke-width="0.8" stroke-linecap="round"/>
+    <!-- stalks -->
+    <path d="M10 20 Q9 14 10 8 Q10.5 4 11 2" stroke="#4a8c3f" stroke-width="2" stroke-linecap="round" fill="none"/>
+    <path d="M13 19 Q13 12 13 6 Q13 3 13 1" stroke="#3a8040" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+    <path d="M16 20 Q17 14 16 8 Q15.5 4 15 2" stroke="#4a8c3f" stroke-width="2" stroke-linecap="round" fill="none"/>
+  </svg>`,
+
+  cauliflower: `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- leaves -->
+    <path d="M5 16 Q2 10 6 8 Q9 12 8 16Z" fill="#4a8c3f"/>
+    <path d="M21 16 Q24 10 20 8 Q17 12 18 16Z" fill="#4a8c3f"/>
+    <path d="M8 18 Q5 14 7 11 Q11 14 10 18Z" fill="#3a8040"/>
+    <path d="M18 18 Q21 14 19 11 Q15 14 16 18Z" fill="#3a8040"/>
+    <!-- curd bumps -->
+    <circle cx="13" cy="9"  r="4.5" fill="#f0ede0"/>
+    <circle cx="8"  cy="12" r="3.5" fill="#ece9d8"/>
+    <circle cx="18" cy="12" r="3.5" fill="#ece9d8"/>
+    <circle cx="10" cy="8"  r="3"   fill="#f4f1e4"/>
+    <circle cx="16" cy="8"  r="3"   fill="#f4f1e4"/>
+    <circle cx="13" cy="6"  r="3"   fill="#f8f5ec"/>
+    <!-- texture bumps -->
+    <circle cx="11" cy="10" r="1.2" fill="#e0dcc8"/>
+    <circle cx="15" cy="10" r="1.2" fill="#e0dcc8"/>
+    <circle cx="13" cy="12" r="1.2" fill="#e0dcc8"/>
+    <circle cx="9"  cy="13" r="1"   fill="#dbd7c4"/>
+    <circle cx="17" cy="13" r="1"   fill="#dbd7c4"/>
+  </svg>`,
+};
+
+// WA-perspective sourcing: closest/most likely origin for a Seattle-area grocery store
+// season: 12 values Jan-Dec, 0=unavailable, 0.1-0.4=light, 0.5-0.7=good, 0.8-1.0=peak
+// cat: 'fruit' or 'veg'
+const PRODUCE = {
+  avocado:    { name:'Avocado',     emoji:'🥑', cat:'fruit',
+    // Available year-round; best supply/price Apr–Aug when Mexico peaks
+    season:[0.6,0.6,0.7,0.9,1.0,1.0,0.9,0.8,0.7,0.6,0.6,0.6],
+    r:  { name:'Michoacán, MX',        flag:'🇲🇽', lat:19.5,  lng:-101.9, share:65, base:55,  note:'World\'s largest avocado region. ~65% of US supply. Drought here moves prices at every WA grocery store within weeks.' },
+    alt:[ { name:'Jalisco, MX',         flag:'🇲🇽', lat:20.7,  lng:-103.4, share:15 },
+          { name:'California, USA',      flag:'🇺🇸', lat:34.1,  lng:-117.1, share:8  },
+          { name:'Dominican Republic',   flag:'🇩🇴', lat:19.0,  lng:-70.2,  share:5  } ],
+    usda:{ n:'LA Terminal – Fruit', pdf:'https://www.ams.usda.gov/mnreports/HC_FV010.pdf' }},
+
+  strawberry: { name:'Strawberry',  emoji:'🍓', cat:'fruit',
+    // Peak Apr–Jun CA/WA local; lower Nov–Feb from Baja/FL but always available
+    season:[0.4,0.4,0.6,0.9,1.0,1.0,0.8,0.6,0.5,0.4,0.4,0.4],
+    r:  { name:'Salinas Valley, CA',    flag:'🇺🇸', lat:36.6,  lng:-121.6, share:55, base:40,  note:'The primary winter strawberry source for WA stores. Watsonville and Salinas ship north all season. Water is the key constraint.' },
+    alt:[ { name:'Santa Maria, CA',      flag:'🇺🇸', lat:34.9,  lng:-120.4, share:20 },
+          { name:'Baja California, MX',  flag:'🇲🇽', lat:31.9,  lng:-116.6, share:15 },
+          { name:'Florida, USA',         flag:'🇺🇸', lat:27.8,  lng:-81.8,  share:8  } ],
+    usda:{ n:'Fresno SP – Fruit', pdf:'https://www.ams.usda.gov/mnreports/FR_FV110.pdf' }},
+
+  apple:      { name:'Apple',       emoji:'🍎', cat:'fruit',
+    // Yakima harvest Sep–Nov = peak quality/price; CA storage supplies year-round
+    season:[0.6,0.6,0.6,0.5,0.5,0.5,0.6,0.7,1.0,1.0,0.9,0.7],
+    r:  { name:'Yakima Valley, WA',     flag:'🇺🇸', lat:46.6,  lng:-120.5, share:70, base:55,  note:'WA produces 70% of US apples — your grocery store apple almost certainly came from within 150 miles. Yakima snowpack is everything.' },
+    alt:[ { name:'Wenatchee, WA',        flag:'🇺🇸', lat:47.4,  lng:-120.3, share:12 },
+          { name:'Hood River, OR',        flag:'🇺🇸', lat:45.7,  lng:-121.5, share:5  },
+          { name:'Upstate New York',      flag:'🇺🇸', lat:43.0,  lng:-76.1,  share:5  } ],
+    usda:{ n:'Seattle SP – Fruit', pdf:'https://www.ams.usda.gov/mnreports/AR_FV110.pdf' }},
+
+  blueberry:  { name:'Blueberry',   emoji:'🫐', cat:'fruit',
+    // Jun–Aug domestic WA/OR peak quality; Peru fills Oct–Apr at lower quality
+    season:[0.5,0.4,0.4,0.5,0.6,0.9,1.0,1.0,0.7,0.5,0.5,0.5],
+    r:  { name:'La Libertad, Peru',     flag:'🇵🇪', lat:-8.0,  lng:-79.0,  share:45, base:18,  note:'Off-season (Oct–Mar) WA blueberries come from Peru, now the world\'s largest exporter. Domestic WA/OR harvest returns in June.' },
+    alt:[ { name:'Skagit Valley, WA',   flag:'🇺🇸', lat:48.4,  lng:-122.3, share:20 },
+          { name:'Willamette Valley, OR',flag:'🇺🇸', lat:45.1,  lng:-123.1, share:15 },
+          { name:'Georgia, USA',         flag:'🇺🇸', lat:32.2,  lng:-83.4,  share:10 },
+          { name:'Chile',                flag:'🇨🇱', lat:-35.7, lng:-71.5,  share:8  } ],
+    usda:{ n:'Miami SP – Fruit Imports', pdf:'https://www.ams.usda.gov/mnreports/MH_FV111.pdf' }},
+
+  orange:     { name:'Orange',      emoji:'🍊', cat:'fruit',
+    // CA Navels peak Dec–Mar; Valencias Jun–Aug; gap in shoulder months
+    season:[1.0,1.0,0.9,0.7,0.5,0.5,0.6,0.5,0.4,0.5,0.7,1.0],
+    r:  { name:'San Joaquin Valley, CA',flag:'🇺🇸', lat:36.4,  lng:-119.4, share:60, base:45,  note:'CA Navel oranges (Dec–Apr) are the primary WA store orange. San Joaquin Valley ships north. Florida navels rarely reach the PNW.' },
+    alt:[ { name:'Riverside County, CA',flag:'🇺🇸', lat:33.9,  lng:-117.4, share:20 },
+          { name:'Sonora, MX',          flag:'🇲🇽', lat:29.0,  lng:-110.9, share:10 },
+          { name:'Florida, USA',        flag:'🇺🇸', lat:28.0,  lng:-81.5,  share:8  } ],
+    usda:{ n:'LA Terminal – Fruit', pdf:'https://www.ams.usda.gov/mnreports/HC_FV010.pdf' }},
+
+  grape:      { name:'Grape',       emoji:'🍇', cat:'fruit',
+    // CA domestic Aug–Oct peak; Chile imports Nov–Apr; brief gap May–Jul
+    season:[0.6,0.5,0.4,0.4,0.4,0.5,0.6,0.9,1.0,1.0,0.8,0.7],
+    r:  { name:'Atacama, Chile',        flag:'🇨🇱', lat:-28.5, lng:-70.5,  share:40, base:8,   note:'Winter table grapes in WA stores (Nov–Apr) ship from Chile\'s Atacama. Dry harvest weather is ideal — rain causes splitting.' },
+    alt:[ { name:'Coquimbo, Chile',     flag:'🇨🇱', lat:-30.0, lng:-71.2,  share:20 },
+          { name:'Coachella Valley, CA',flag:'🇺🇸', lat:33.7,  lng:-116.2, share:15 },
+          { name:'San Joaquin, CA',     flag:'🇺🇸', lat:36.6,  lng:-119.6, share:12 },
+          { name:'Peru',                flag:'🇵🇪', lat:-14.0, lng:-75.0,  share:8  } ],
+    usda:{ n:'Miami SP – Fruit Imports', pdf:'https://www.ams.usda.gov/mnreports/MH_FV111.pdf' }},
+
+  mango:      { name:'Mango',       emoji:'🥭', cat:'fruit',
+    // Mexico ships May–Sep; Peru/Ecuador bridge winter but quality/variety drops
+    season:[0.4,0.4,0.5,0.7,1.0,1.0,0.9,0.8,0.6,0.5,0.4,0.4],
+    r:  { name:'Guerrero, MX',          flag:'🇲🇽', lat:17.5,  lng:-100.5, share:60, base:80,  note:'Mexico\'s Pacific coast supplies 60% of US mangoes reaching WA. Ataulfo and Tommy Atkins varieties dominate PNW shelves.' },
+    alt:[ { name:'Nayarit, MX',         flag:'🇲🇽', lat:21.8,  lng:-105.2, share:15 },
+          { name:'Peru',                flag:'🇵🇪', lat:-12.0, lng:-77.0,  share:12 },
+          { name:'Ecuador',             flag:'🇪🇨', lat:-1.8,  lng:-78.2,  share:8  } ],
+    usda:{ n:'Miami SP – Fruit Imports', pdf:'https://www.ams.usda.gov/mnreports/MH_FV111.pdf' }},
+
+  tomato:     { name:'Tomato',      emoji:'🍅', cat:'veg',
+    // Available year-round; Jul–Sep local/CA peak flavor; Nov–Apr Mexico hothouse
+    season:[0.5,0.5,0.6,0.7,0.8,0.9,1.0,1.0,0.9,0.7,0.6,0.5],
+    r:  { name:'Sinaloa, MX',           flag:'🇲🇽', lat:25.0,  lng:-107.4, share:40, base:30,  note:'WA stores get winter tomatoes from Sinaloa\'s Culiacan valley. Mexico supplies 70%+ of US tomatoes Nov–Apr.' },
+    alt:[ { name:'Sonora, MX',           flag:'🇲🇽', lat:29.0,  lng:-110.9, share:20 },
+          { name:'Baja California, MX',  flag:'🇲🇽', lat:31.9,  lng:-116.6, share:12 },
+          { name:'Florida, USA',         flag:'🇺🇸', lat:26.1,  lng:-80.2,  share:10 } ],
+    usda:{ n:'Orlando SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/OR_FV120.pdf' }},
+
+  lettuce:    { name:'Lettuce',     emoji:'🥬', cat:'veg',
+    // Year-round availability; Salinas Apr–Oct, Yuma Nov–Mar; consistent supply
+    season:[0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,1.0,1.0,0.9,0.9],
+    r:  { name:'Yuma, AZ',              flag:'🇺🇸', lat:32.7,  lng:-114.6, share:70, base:5,   note:'90% of US winter lettuce ships from Yuma. Every WA salad bag Nov–Mar traces back to Colorado River water allocations.' },
+    alt:[ { name:'Salinas Valley, CA',  flag:'🇺🇸', lat:36.6,  lng:-121.6, share:20 },
+          { name:'Imperial Valley, CA', flag:'🇺🇸', lat:33.0,  lng:-115.5, share:7  } ],
+    usda:{ n:'Phoenix SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/IX_FV120.pdf' }},
+
+  potato:     { name:'Potato',      emoji:'🥔', cat:'veg',
+    // Year-round from storage; Aug–Oct new crop from Columbia Basin = peak freshness
+    season:[0.8,0.8,0.8,0.7,0.7,0.7,0.7,0.9,1.0,1.0,0.9,0.8],
+    r:  { name:'Columbia Basin, WA',    flag:'🇺🇸', lat:46.8,  lng:-119.5, share:25, base:30,  note:'WA is the #1 US potato state — your grocery store Russets likely came from the Columbia Basin (Othello/Moses Lake area) or just over the border in Idaho.' },
+    alt:[ { name:'Snake River Plain, ID',flag:'🇺🇸', lat:43.5,  lng:-114.0, share:30 },
+          { name:'Klamath Basin, OR',   flag:'🇺🇸', lat:42.2,  lng:-121.8, share:10 },
+          { name:'San Luis Valley, CO', flag:'🇺🇸', lat:37.5,  lng:-106.1, share:8  } ],
+    usda:{ n:'Seattle SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/AR_FV120.pdf' }},
+
+  onion:      { name:'Onion',       emoji:'🧅', cat:'veg',
+    // Year-round from storage; Jun–Aug sweet onion season (Walla Walla) = peak
+    season:[0.8,0.8,0.8,0.8,0.8,0.9,1.0,1.0,0.9,0.9,0.8,0.8],
+    r:  { name:'Treasure Valley, ID/OR',flag:'🇺🇸', lat:43.7,  lng:-116.9, share:30, base:25,  note:'The Treasure Valley (Ontario OR / Caldwell ID) is the closest major onion storage region to WA. Supplies PNW stores all winter from summer harvest.' },
+    alt:[ { name:'Walla Walla, WA',     flag:'🇺🇸', lat:46.1,  lng:-118.3, share:12 },
+          { name:'San Joaquin, CA',     flag:'🇺🇸', lat:37.6,  lng:-120.9, share:20 },
+          { name:'Chihuahua, MX',       flag:'🇲🇽', lat:28.6,  lng:-106.1, share:15 } ],
+    usda:{ n:'Seattle SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/AR_FV120.pdf' }},
+
+  broccolini: { name:'Broccolini',  emoji:SVG.broccolini, cat:'veg',
+    // Salinas Apr–Oct, Yuma Nov–Mar; year-round at WA stores, peak spring/fall
+    season:[0.8,0.8,0.9,1.0,1.0,0.9,0.8,0.8,0.9,1.0,0.9,0.8],
+    r:  { name:'Salinas Valley, CA',    flag:'🇺🇸', lat:36.5,  lng:-121.5, share:80, base:40,  note:'Broccolini is grown almost exclusively in CA\'s Salinas Valley (summer) and Yuma, AZ (winter). Nearly every bunch in a WA store comes from one of these two spots.' },
+    alt:[ { name:'Yuma, AZ',            flag:'🇺🇸', lat:32.7,  lng:-114.6, share:18 } ],
+    usda:{ n:'Fresno SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/FR_FV120.pdf' }},
+
+  asparagus:  { name:'Asparagus',   emoji:SVG.asparagus, cat:'veg',
+    // Apr–Jun Yakima domestic = peak quality & price; Peru available year-round at lower quality
+    season:[0.5,0.5,0.7,1.0,1.0,0.8,0.6,0.5,0.5,0.5,0.5,0.5],
+    r:  { name:'Ica Valley, Peru',      flag:'🇵🇪', lat:-14.0, lng:-75.5,  share:50, base:8,   note:'WA asparagus season is Apr–Jun (Yakima). The rest of the year WA stores source from Peru\'s Ica Valley, which ships year-round.' },
+    alt:[ { name:'Yakima Valley, WA',   flag:'🇺🇸', lat:46.6,  lng:-120.5, share:20 },
+          { name:'San Joaquin, CA',     flag:'🇺🇸', lat:37.6,  lng:-120.9, share:15 },
+          { name:'Sonora, MX',          flag:'🇲🇽', lat:29.0,  lng:-110.9, share:10 } ],
+    usda:{ n:'Miami SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/MH_FV121.pdf' }},
+
+  green_onion:{ name:'Green Onion', emoji:SVG.green_onion, cat:'veg',
+    // Year-round; spring Apr–Jun = freshest domestic supply, peak quality
+    season:[0.8,0.8,0.9,1.0,1.0,0.9,0.8,0.8,0.8,0.8,0.8,0.8],
+    r:  { name:'Baja California, MX',   flag:'🇲🇽', lat:32.5,  lng:-115.3, share:55, base:12,  note:'Mexicali and the Imperial Valley (Muranaka Farm is the dominant grower) supply most winter green onions to WA stores Nov–Apr.' },
+    alt:[ { name:'Salinas Valley, CA',  flag:'🇺🇸', lat:36.6,  lng:-121.6, share:25 },
+          { name:'Sinaloa, MX',         flag:'🇲🇽', lat:25.0,  lng:-107.4, share:12 } ],
+    usda:{ n:'Phoenix SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/IX_FV120.pdf' }},
+
+  cauliflower:{ name:'Cauliflower', emoji:SVG.cauliflower, cat:'veg',
+    // Salinas year-round; Oct–Feb cool season = peak quality and lowest price
+    season:[0.9,0.9,0.8,0.7,0.6,0.6,0.6,0.7,0.8,1.0,1.0,0.9],
+    r:  { name:'Salinas Valley, CA',    flag:'🇺🇸', lat:36.4,  lng:-121.4, share:75, base:40,  note:'Salinas Valley produces ~75% of US cauliflower. The cool coastal fog is essential — heat causes browning. WA stores source from here year-round.' },
+    alt:[ { name:'Santa Maria, CA',     flag:'🇺🇸', lat:34.9,  lng:-120.4, share:12 },
+          { name:'Yuma, AZ',            flag:'🇺🇸', lat:32.7,  lng:-114.6, share:8  } ],
+    usda:{ n:'Fresno SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/FR_FV120.pdf' }},
+
+  raspberry:  { name:'Raspberry',   emoji:'🍓', cat:'fruit',
+    // Jun–Oct WA/OR domestic peak; Mexico fills Nov–May but limited supply
+    season:[0.3,0.3,0.4,0.5,0.6,0.9,1.0,1.0,0.8,0.5,0.3,0.3],
+    r:  { name:'Whatcom County, WA',    flag:'🇺🇸', lat:48.8,  lng:-122.4, share:35, base:15,  note:'WA is the top US raspberry state. Lynden and Everson in Whatcom County supply most PNW fresh raspberries Jun–Sep. Mexico fills the winter gap.' },
+    alt:[ { name:'Willamette Valley, OR',flag:'🇺🇸', lat:45.1,  lng:-123.1, share:20 },
+          { name:'Baja California, MX',  flag:'🇲🇽', lat:31.9,  lng:-116.6, share:25 },
+          { name:'Central CA',           flag:'🇺🇸', lat:36.5,  lng:-120.5, share:12 } ],
+    usda:{ n:'Seattle SP – Fruit', pdf:'https://www.ams.usda.gov/mnreports/AR_FV110.pdf' }},
+
+  cantaloupe: { name:'Cantaloupe',  emoji:'🍈', cat:'fruit',
+    // Jun–Sep CA/WA peak; limited off-season from Mexico and Central America
+    season:[0.2,0.2,0.2,0.3,0.5,0.8,1.0,1.0,0.8,0.4,0.2,0.2],
+    r:  { name:'San Joaquin Valley, CA',flag:'🇺🇸', lat:36.7,  lng:-119.7, share:55, base:70,  note:'CA\'s San Joaquin Valley (Fresno/Turlock area) grows ~55% of US cantaloupes. Peak Jul–Aug when heat drives brix up — the sweetest melons of the year.' },
+    alt:[ { name:'Yuma, AZ',            flag:'🇺🇸', lat:32.7,  lng:-114.6, share:15 },
+          { name:'Sonora, MX',          flag:'🇲🇽', lat:29.0,  lng:-110.9, share:12 },
+          { name:'Guatemala',           flag:'🇬🇹', lat:14.6,  lng:-90.5,  share:8  } ],
+    usda:{ n:'Fresno SP – Fruit', pdf:'https://www.ams.usda.gov/mnreports/FR_FV110.pdf' }},
+
+  watermelon: { name:'Watermelon',  emoji:'🍉', cat:'fruit',
+    // Jul–Sep domestic peak; Mexico and Central America bridge spring and fall
+    season:[0.1,0.1,0.2,0.3,0.5,0.7,1.0,1.0,0.7,0.4,0.2,0.1],
+    r:  { name:'Hermiston, OR',         flag:'🇺🇸', lat:45.8,  lng:-119.3, share:20, base:80,  note:'Hermiston (Umatilla County) grows the closest watermelons to WA — the famous Hermiston Sweet. Peak Aug–Sep. Mexico supplies the rest of the year.' },
+    alt:[ { name:'San Joaquin Valley, CA',flag:'🇺🇸', lat:36.0, lng:-119.5, share:25 },
+          { name:'Sonora, MX',          flag:'🇲🇽', lat:29.0,  lng:-110.9, share:20 },
+          { name:'Jalisco, MX',         flag:'🇲🇽', lat:20.7,  lng:-103.4, share:15 } ],
+    usda:{ n:'Fresno SP – Fruit', pdf:'https://www.ams.usda.gov/mnreports/FR_FV110.pdf' }},
+
+  mushroom:   { name:'Mushroom',    emoji:'🍄', cat:'veg',
+    // Grown indoors year-round; no true season — slightly better supply Oct–Apr
+    season:[0.9,0.9,0.9,0.8,0.8,0.8,0.8,0.8,0.9,1.0,1.0,0.9],
+    r:  { name:'Farmers Fresh, Abbotsford BC', flag:'🇨🇦', lat:49.05, lng:-122.32, share:35, base:15, note:'Jeffco sources mushrooms from Farmers Fresh in Abbotsford BC — 45 min from the WA border. Button, crimini, and portobello grown indoors year-round in the Fraser Valley.' },
+    alt:[ { name:'Kennett Square, PA',  flag:'🇺🇸', lat:39.8,  lng:-75.7,  share:40 },
+          { name:'Watsonville, CA',     flag:'🇺🇸', lat:36.9,  lng:-121.8, share:15 },
+          { name:'Quincy Farms, WA',    flag:'🇺🇸', lat:47.2,  lng:-119.9, share:10 } ],
+    usda:{ n:'Seattle SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/AR_FV120.pdf' }},
+
+  carrot:     { name:'Carrot',      emoji:'🥕', cat:'veg',
+    // Year-round from storage and CA; fall harvest = peak sweetness after frost
+    season:[0.8,0.8,0.8,0.8,0.8,0.8,0.8,0.9,1.0,1.0,0.9,0.8],
+    r:  { name:'Kern County, CA',       flag:'🇺🇸', lat:35.3,  lng:-119.0, share:70, base:25,  note:'Kern County (Bakersfield area) produces ~70% of US carrots. Bolthouse and Grimmway Farms ship to WA year-round. Fall is peak for sweetness.' },
+    alt:[ { name:'Imperial Valley, CA', flag:'🇺🇸', lat:33.0,  lng:-115.5, share:15 },
+          { name:'Skagit Valley, WA',   flag:'🇺🇸', lat:48.4,  lng:-122.3, share:5  },
+          { name:'Chihuahua, MX',       flag:'🇲🇽', lat:28.6,  lng:-106.1, share:5  } ],
+    usda:{ n:'Fresno SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/FR_FV120.pdf' }},
+
+  broccoli:   { name:'Broccoli',    emoji:'🥦', cat:'veg',
+    // Salinas summer, Yuma winter — near-year-round; cool weather = peak quality
+    season:[0.8,0.9,0.9,0.9,0.9,0.8,0.7,0.8,0.9,1.0,1.0,0.9],
+    r:  { name:'Salinas Valley, CA',    flag:'🇺🇸', lat:36.6,  lng:-121.5, share:70, base:35,  note:'Salinas Valley supplies ~70% of US broccoli. Like broccolini, it migrates to Yuma Nov–Mar. Cool coastal temps produce tighter, sweeter heads.' },
+    alt:[ { name:'Yuma, AZ',            flag:'🇺🇸', lat:32.7,  lng:-114.6, share:20 },
+          { name:'Santa Maria, CA',     flag:'🇺🇸', lat:34.9,  lng:-120.4, share:7  } ],
+    usda:{ n:'Fresno SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/FR_FV120.pdf' }},
+};
+
+// ══════════════════════════════════════════════════════════
+//  GOOGLE SHEETS SOURCE OVERRIDE
+//  1. In Google Sheets: File → Share → Publish to web
+//     → Sheet1 → CSV → Publish. Paste the URL below.
+//  2. Columns: produce | region | vendor | updated
+//     produce = key name (asparagus, mushroom, etc.)
+//     region  = plain text: "Mexico", "Peru", "Sonora MX", etc.
+//  3. Delete a row to revert that item to default data.
+// ══════════════════════════════════════════════════════════
+const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/1-DbKR8ul1VNqyAxS9ThELJEThMOTwRJa_dhLDvMYktc/export?format=csv';
+
+// Fuzzy keyword → coordinates fallback table
+// App first tries to match against a produce item's own known regions,
+// then falls back to this table.
+const REGION_LOOKUP = {
+  'mexico':          { name:'Sonora, MX',             lat:29.0,  lng:-110.9 },
+  'sonora':          { name:'Sonora, MX',             lat:29.0,  lng:-110.9 },
+  'sinaloa':         { name:'Sinaloa, MX',            lat:25.0,  lng:-107.4 },
+  'baja':            { name:'Baja California, MX',    lat:31.9,  lng:-116.6 },
+  'jalisco':         { name:'Jalisco, MX',            lat:20.7,  lng:-103.4 },
+  'guerrero':        { name:'Guerrero, MX',           lat:17.5,  lng:-100.5 },
+  'michoacan':       { name:'Michoacán, MX',          lat:19.5,  lng:-101.9 },
+  'nayarit':         { name:'Nayarit, MX',            lat:21.8,  lng:-105.2 },
+  'chihuahua':       { name:'Chihuahua, MX',          lat:28.6,  lng:-106.1 },
+  'peru':            { name:'Ica Valley, Peru',       lat:-14.0, lng:-75.5  },
+  'chile':           { name:'Atacama, Chile',         lat:-28.5, lng:-70.5  },
+  'ecuador':         { name:'Ecuador',                lat:-1.8,  lng:-78.2  },
+  'colombia':        { name:'Colombia',               lat:5.0,   lng:-75.0  },
+  'guatemala':       { name:'Guatemala',              lat:14.6,  lng:-90.5  },
+  'dominican':       { name:'Dominican Republic',     lat:19.0,  lng:-70.2  },
+  'california':      { name:'Salinas Valley, CA',     lat:36.6,  lng:-121.6 },
+  'salinas':         { name:'Salinas Valley, CA',     lat:36.6,  lng:-121.6 },
+  'san joaquin':     { name:'San Joaquin Valley, CA', lat:36.6,  lng:-119.6 },
+  'kern':            { name:'Kern County, CA',        lat:35.3,  lng:-119.0 },
+  'santa maria':     { name:'Santa Maria, CA',        lat:34.9,  lng:-120.4 },
+  'coachella':       { name:'Coachella Valley, CA',   lat:33.7,  lng:-116.2 },
+  'imperial':        { name:'Imperial Valley, CA',    lat:33.0,  lng:-115.5 },
+  'riverside':       { name:'Riverside County, CA',   lat:33.9,  lng:-117.4 },
+  'watsonville':     { name:'Watsonville, CA',        lat:36.9,  lng:-121.8 },
+  'yuma':            { name:'Yuma, AZ',               lat:32.7,  lng:-114.6 },
+  'arizona':         { name:'Yuma, AZ',               lat:32.7,  lng:-114.6 },
+  'washington':      { name:'Yakima Valley, WA',      lat:46.6,  lng:-120.5 },
+  'yakima':          { name:'Yakima Valley, WA',      lat:46.6,  lng:-120.5 },
+  'wenatchee':       { name:'Wenatchee, WA',          lat:47.4,  lng:-120.3 },
+  'skagit':          { name:'Skagit Valley, WA',      lat:48.4,  lng:-122.3 },
+  'whatcom':         { name:'Whatcom County, WA',     lat:48.8,  lng:-122.4 },
+  'columbia basin':  { name:'Columbia Basin, WA',     lat:46.8,  lng:-119.5 },
+  'hermiston':       { name:'Hermiston, OR',          lat:45.8,  lng:-119.3 },
+  'oregon':          { name:'Willamette Valley, OR',  lat:45.1,  lng:-123.1 },
+  'willamette':      { name:'Willamette Valley, OR',  lat:45.1,  lng:-123.1 },
+  'idaho':           { name:'Snake River Plain, ID',  lat:43.5,  lng:-114.0 },
+  'treasure valley': { name:'Treasure Valley, ID/OR', lat:43.7,  lng:-116.9 },
+  'florida':         { name:'Florida, USA',           lat:27.8,  lng:-81.8  },
+  'georgia':         { name:'Georgia, USA',           lat:32.2,  lng:-83.4  },
+  'pennsylvania':    { name:'Kennett Square, PA',     lat:39.8,  lng:-75.7  },
+  'kennett':         { name:'Kennett Square, PA',     lat:39.8,  lng:-75.7  },
+  'bc':              { name:'Abbotsford, BC',         lat:49.05, lng:-122.32 },
+  'british columbia':{ name:'Abbotsford, BC',         lat:49.05, lng:-122.32 },
+  'abbotsford':      { name:'Abbotsford, BC',         lat:49.05, lng:-122.32 },
+  'farmers fresh':   { name:'Farmers Fresh, Abbotsford BC', lat:49.05, lng:-122.32 },
+  'canada':          { name:'British Columbia, CA',   lat:49.2,  lng:-122.8  },
+};
+
+// Active overrides keyed by produce key
+const OVERRIDES = {};
+
+// Resolve a text string to { name, lat, lng }
+// First checks the produce item's own known regions, then REGION_LOOKUP
+function resolveRegion(key, text) {
+  const q = text.toLowerCase().trim();
+  const p = PRODUCE[key];
+  const allRegions = [p.r, ...(p.alt || [])];
+
+  // Try matching against known regions for this produce
+  for (const r of allRegions) {
+    const rn = r.name.toLowerCase();
+    const rParts = rn.split(/[,\s]+/);
+    if (rn.includes(q) || rParts.some(part => q.includes(part) && part.length > 3)) {
+      return { name: r.name, lat: r.lat, lng: r.lng };
+    }
+  }
+
+  // Fall back to general lookup — longest keyword match wins
+  let best = null, bestLen = 0;
+  for (const [kw, region] of Object.entries(REGION_LOOKUP)) {
+    if (q.includes(kw) || kw.includes(q)) {
+      if (kw.length > bestLen) { best = region; bestLen = kw.length; }
+    }
+  }
+  return best;
+}
+
+// Apply an override: move the pin, re-fetch weather, update panel if open
+function applyOverride(key, regionText, vendor) {
+  const resolved = resolveRegion(key, regionText);
+  if (!resolved) { console.warn(`VegWatch: couldn't resolve region "${regionText}" for ${key}`); return; }
+
+  OVERRIDES[key] = { region: resolved, vendor: vendor || '', raw: regionText };
+
+  // Move existing marker to new location
+  if (leafMarkers[key]) {
+    leafMarkers[key].setLatLng([resolved.lat, resolved.lng]);
+  }
+
+  // Re-fetch weather at new location
+  fetchWx(key, resolved.lat, resolved.lng, true);
+
+  // Refresh panel if this item is currently open
+  if (activeKey === key) fillPanel(key);
+}
+
+// Clear a single override and restore defaults
+function clearOverride(key) {
+  if (!OVERRIDES[key]) return;
+  delete OVERRIDES[key];
+  const r = PRODUCE[key].r;
+  if (leafMarkers[key]) leafMarkers[key].setLatLng([r.lat, r.lng]);
+  fetchWx(key, r.lat, r.lng, true);
+  if (activeKey === key) fillPanel(key);
+}
+
+// Fetch and parse the Google Sheet CSV
+async function loadSheet() {
+  if (!SHEET_CSV_URL) return;
+  try {
+    const res = await fetch(SHEET_CSV_URL);
+    const text = await res.text();
+    const rows = text.trim().split('\n').slice(1); // skip header row
+    const seen = new Set();
+    rows.forEach(row => {
+      const cols = row.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+      const [produceRaw, regionRaw, vendorRaw] = cols;
+      if (!produceRaw || !regionRaw) return;
+      // Match produce column to PRODUCE key (case-insensitive, spaces→underscores)
+      const key = Object.keys(PRODUCE).find(k =>
+        k === produceRaw.toLowerCase().replace(/\s+/g,'_') ||
+        PRODUCE[k].name.toLowerCase() === produceRaw.toLowerCase()
+      );
+      if (!key) return;
+      seen.add(key);
+      applyOverride(key, regionRaw, vendorRaw);
+    });
+    // Clear overrides for items no longer in sheet
+    Object.keys(OVERRIDES).forEach(k => { if (!seen.has(k)) clearOverride(k); });
+  } catch(e) { console.warn('VegWatch: sheet load failed', e); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  WEATHER STATIONS — Americas regional coverage
+// ══════════════════════════════════════════════════════════
+const STATIONS = [
+  { id:'sw_us',     lat:36,   lng:-116,  label:'SW USA'       },
+  { id:'pnw',       lat:47,   lng:-122,  label:'Pacific NW'   },
+  { id:'cal_cen',   lat:37,   lng:-120,  label:'Central CA'   },
+  { id:'plains',    lat:41,   lng:-100,  label:'Great Plains'  },
+  { id:'se_us',     lat:33,   lng:-86,   label:'SE USA'        },
+  { id:'ne_us',     lat:43,   lng:-72,   label:'NE USA'        },
+  { id:'midwest',   lat:42,   lng:-90,   label:'Midwest'       },
+  { id:'n_mex',     lat:28,   lng:-106,  label:'N. Mexico'     },
+  { id:'s_mex',     lat:18,   lng:-96,   label:'S. Mexico'     },
+  { id:'c_am',      lat:13,   lng:-86,   label:'C. America'    },
+  { id:'carib',     lat:20,   lng:-75,   label:'Caribbean'     },
+  { id:'colombia',  lat:5,    lng:-75,   label:'Colombia'      },
+  { id:'amazon',    lat:-5,   lng:-63,   label:'Amazon'        },
+  { id:'ne_braz',   lat:-10,  lng:-48,   label:'NE Brazil'     },
+  { id:'c_chile',   lat:-33,  lng:-70,   label:'Central Chile' },
+  { id:'patagonia', lat:-48,  lng:-68,   label:'Patagonia'     },
+  { id:'s_brazil',  lat:-23,  lng:-48,   label:'SE Brazil'     },
+  { id:'peru_coast',lat:-12,  lng:-76,   label:'Peru Coast'    },
+  { id:'texas',     lat:30,   lng:-98,   label:'Texas'         },
+  { id:'florida',   lat:27,   lng:-82,   label:'Florida'       },
+];
+
+// ══════════════════════════════════════════════════════════
+//  WEATHER CLASSIFICATION
+//  Always returns a condition — every station shows current weather.
+//  Ordered: most severe first, catch-all at the bottom.
+// ══════════════════════════════════════════════════════════
+function classifyWx(tempC, precip7) {
+  const tF = tempC * 9/5 + 32;
+
+  // Severe / extreme
+  if (tF >= 105)               return { emoji:'🔥', label:'EXTREME HEAT', color:'#f5224e' };
+  if (precip7 >= 100)         return { emoji:'🌊', label:'FLOODING',      color:'#2050f0' };
+  if (tF <= 15)                return { emoji:'🥶', label:'HARD FREEZE',  color:'#42d4f5' };
+  if (precip7 >= 60)          return { emoji:'⛈️',  label:'HEAVY RAIN',   color:'#4870e8' };
+  if (tF >= 95)                return { emoji:'☀️',  label:'HEAT WAVE',   color:'#f59200' };
+  if (tF <= 28)                return { emoji:'❄️',  label:'FREEZE',      color:'#80d0f5' };
+
+  // Notable
+  if (precip7 >= 35)          return { emoji:'🌧️', label:'WET',           color:'#6899e8' };
+  if (precip7 < 3 && tF > 85) return { emoji:'🏜️', label:'DROUGHT',      color:'#f5882a' };
+  if (tF >= 88)                return { emoji:'🌡️', label:'VERY HOT',     color:'#f5b830' };
+  if (tF <= 36)                return { emoji:'🌨️', label:'NEAR FREEZE',  color:'#a0d0f0' };
+  if (precip7 >= 18)          return { emoji:'🌦️', label:'SHOWERY',      color:'#7899d8' };
+  if (tF <= 45)                return { emoji:'🌬️', label:'COLD',         color:'#90c8e8' };
+  if (precip7 < 5 && tF > 75) return { emoji:'🌤️', label:'DRY',          color:'#e8c030' };
+  if (tF >= 78)                return { emoji:'🌞', label:'WARM',         color:'#d4a820' };
+
+  // Catch-all — always show something
+  if (precip7 >= 8)            return { emoji:'🌥️', label:'OVERCAST',     color:'#8899aa' };
+  if (tF >= 60)                return { emoji:'🌈', label:'MILD',          color:'#70b888' };
+  if (tF >= 48)                return { emoji:'🌥️', label:'COOL',         color:'#8899aa' };
+  return                              { emoji:'🌨️', label:'CHILLY',        color:'#90b8d0' };
+}
+
+// ══════════════════════════════════════════════════════════
+//  PIN COLORING — driven by classifyWx at that location,
+//  same system as the weather overlays. No drought scoring.
+// ══════════════════════════════════════════════════════════
+function wxGlowStyle(wx) {
+  // Returns inline style string for the bubble based on wx condition color
+  if (!wx) return '';
+  const c = wx.color;
+  // Parse hex to rgba for background tint
+  const r = parseInt(c.slice(1,3),16), g = parseInt(c.slice(3,5),16), b = parseInt(c.slice(5,7),16);
+  return `background:rgba(${r},${g},${b},0.2);border-color:${c};box-shadow:0 0 22px rgba(${r},${g},${b},0.55)`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════
+const wxData    = {};  // id → data | null
+const leafMarkers = {}; // key → Leaflet marker
+let activeKey   = null;
+
+// ══════════════════════════════════════════════════════════
+//  FETCH WEATHER
+// ══════════════════════════════════════════════════════════
+async function fetchWx(id, lat, lng, isProduce) {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}`
+      + `&current=temperature_2m&daily=precipitation_sum,temperature_2m_max`
+      + `&timezone=auto&past_days=30&forecast_days=1`;
+    const d = await (await fetch(url)).json();
+    const tempC = d.current.temperature_2m;
+    const precip = d.daily.precipitation_sum || [];
+    const tempMax = d.daily.temperature_2m_max || [];
+    const dates   = d.daily.time || [];
+    // Last 5 days (most recent at end of array, exclude today's forecast)
+    const last5 = [];
+    const end = Math.min(precip.length, tempMax.length, dates.length);
+    for (let i = Math.max(0, end - 6); i < end - 1; i++) {
+      last5.push({
+        date:   dates[i],
+        precip: precip[i] || 0,
+        tempC:  tempMax[i],
+        tempF:  Math.round(tempMax[i] * 9/5 + 32),
+      });
+    }
+    wxData[id] = {
+      tempC,
+      tempF:      Math.round(tempC * 9/5 + 32),
+      precip30mm: Math.round(precip.slice(0,30).reduce((a,v)=>a+(v||0),0)),
+      precip7mm:  Math.round(precip.slice(0,7).reduce((a,v)=>a+(v||0),0)),
+      daily5:     last5,
+    };
+  } catch { wxData[id] = null; }
+
+  if (isProduce) {
+    refreshProduceMarker(id);
+    if (id === activeKey) fillPanel(id);
+  } else {
+    placeWxMarker(id);
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  PRODUCE MARKERS
+// ══════════════════════════════════════════════════════════
+function pinHTML(key) {
+  const p = PRODUCE[key], w = wxData[key];
+  const wx = w ? classifyWx(w.tempC, w.precip7mm) : null;
+  const glowStyle = wx ? wxGlowStyle(wx) : '';
+  const bubbleStyle = wx ? glowStyle : 'background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.18)';
+  const needsPulse = wx && ['EXTREME HEAT','FLOODING','HARD FREEZE','HEAVY RAIN','HEAT WAVE','FREEZE'].includes(wx.label);
+  const pulseColor = wx ? wx.color : 'rgba(255,255,255,0.3)';
+  const pulse = needsPulse ? `<div class="pin-pulse" style="border:2.5px solid ${pulseColor}"></div>` : '';
+  const badge = wx ? `<div class="pin-wx">${wx.emoji}</div>` : '';
+  const condColor = wx ? wx.color : 'rgba(255,255,255,.3)';
+  const condText  = wx ? wx.label : '…';
+  return `<div class="pin" data-key="${key}">
+    <div class="pin-bubble" style="${bubbleStyle}">${pulse}${p.emoji}${badge}</div>
+    <div class="pin-label">
+      <div class="pin-temp">${w ? w.tempF+'°' : '…'}</div>
+      <div class="pin-cond" style="color:${condColor}">${condText}</div>
+    </div>
+  </div>`;
+}
+
+function makeProduceIcon(key) {
+  return L.divIcon({
+    className: '',
+    html: pinHTML(key),
+    iconSize: [60, 82],
+    iconAnchor: [30, 41],
+  });
+}
+
+function createProduceMarker(key) {
+  const r = PRODUCE[key].r;
+  const marker = L.marker([r.lat, r.lng], { icon: makeProduceIcon(key) });
+  marker.on('click', () => openPanel(key));
+  marker.addTo(map);
+  leafMarkers[key] = marker;
+}
+
+function refreshProduceMarker(key) {
+  if (leafMarkers[key]) leafMarkers[key].setIcon(makeProduceIcon(key));
+}
+
+// ══════════════════════════════════════════════════════════
+//  WEATHER OVERLAY MARKERS
+// ══════════════════════════════════════════════════════════
+const wxMarkers = {};
+
+function placeWxMarker(id) {
+  const st = STATIONS.find(s => s.id === id);
+  if (!st) return;
+  const w = wxData[id];
+  if (!w) return;
+  const wx = classifyWx(w.tempC, w.precip7mm);
+  if (!wx) return;
+  if (wxMarkers[id]) { map.removeLayer(wxMarkers[id]); delete wxMarkers[id]; }
+  const icon = L.divIcon({
+    className: '',
+    html: `<div class="wx">
+      <div class="wx-ico">${wx.emoji}</div>
+      <div class="wx-tag" style="color:${wx.color};border-color:${wx.color}55">${wx.label}</div>
+    </div>`,
+    iconSize: [70, 52],
+    iconAnchor: [35, 26],
+  });
+  const marker = L.marker([st.lat, st.lng], { icon, interactive:false, zIndexOffset:-100 });
+  marker.addTo(map);
+  wxMarkers[id] = marker;
+}
+
+// ══════════════════════════════════════════════════════════
+//  SHOW / HIDE OTHER PRODUCE MARKERS
+// ══════════════════════════════════════════════════════════
+function hideOthers(key) {
+  // Ensure active marker is on map first (fixes direct-switch bug)
+  if (leafMarkers[key] && !map.hasLayer(leafMarkers[key])) {
+    leafMarkers[key].addTo(map);
+  }
+  Object.entries(leafMarkers).forEach(([k, m]) => {
+    if (k !== key) map.removeLayer(m);
+  });
+}
+function showAll() {
+  Object.entries(leafMarkers).forEach(([k, m]) => {
+    if (!map.hasLayer(m)) m.addTo(map);
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+//  FOCUSED WEATHER OVERLAYS — show wx only at active regions
+// ══════════════════════════════════════════════════════════
+const focusedWxMarkers = [];
+
+function hideAllWxMarkers() {
+  Object.values(wxMarkers).forEach(m => map.removeLayer(m));
+}
+function showAllWxMarkers() {
+  Object.values(wxMarkers).forEach(m => { if (!map.hasLayer(m)) m.addTo(map); });
+}
+function clearFocusedWx() {
+  focusedWxMarkers.forEach(m => map.removeLayer(m));
+  focusedWxMarkers.length = 0;
+}
+
+function showFocusedWx(key) {
+  clearFocusedWx();
+  hideAllWxMarkers();
+
+  // Show wx at primary region using already-fetched produce weather data
+  const w = wxData[key];
+  const p = PRODUCE[key];
+  if (w) {
+    const wx = classifyWx(w.tempC, w.precip7mm);
+    if (wx) {
+      const icon = L.divIcon({
+        className: '',
+        html: `<div class="wx">
+          <div class="wx-ico">${wx.emoji}</div>
+          <div class="wx-tag" style="color:${wx.color};border-color:${wx.color}55">${wx.label}</div>
+        </div>`,
+        iconSize: [70, 52], iconAnchor: [35, 26],
+      });
+      const m = L.marker([p.r.lat, p.r.lng], { icon, interactive:false, zIndexOffset:-50 });
+      m.addTo(map);
+      focusedWxMarkers.push(m);
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  SECONDARY REGION MARKERS — B&W, full opacity
+// ══════════════════════════════════════════════════════════
+const secMarkers = [];
+
+function clearSecondary() {
+  secMarkers.forEach(m => map.removeLayer(m));
+  secMarkers.length = 0;
+}
+
+function showSecondary(key) {
+  clearSecondary();
+  const p = PRODUCE[key];
+  if (!p.alt || !p.alt.length) return;
+  p.alt.forEach(a => {
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="pin-sec">
+        <div class="pin-sec-bubble">${p.emoji}</div>
+        <div class="pin-sec-label">
+          <div class="pin-sec-name">${a.name}</div>
+          <div class="pin-sec-share">${a.share}% of supply</div>
+        </div>
+      </div>`,
+      iconSize: [90, 60],
+      iconAnchor: [45, 30],
+    });
+    const m = L.marker([a.lat, a.lng], { icon, interactive:false, zIndexOffset:-200 });
+    m.addTo(map);
+    secMarkers.push(m);
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+//  DETAIL PANEL
+// ══════════════════════════════════════════════════════════
+function openPanel(key) {
+  activeKey = key;
+  buildPills(); // rebuilds with correct active state
+  fillPanel(key);
+  document.getElementById('detail').style.display = 'block';
+  hideOthers(key);
+  showSecondary(key);
+  showFocusedWx(key);
+
+  // Fit map to primary + all secondary regions
+  const p = PRODUCE[key];
+  const ov = OVERRIDES[key];
+  const primaryLatLng = ov ? [ov.region.lat, ov.region.lng] : [p.r.lat, p.r.lng];
+  const latlngs = [primaryLatLng];
+  (p.alt || []).forEach(a => latlngs.push([a.lat, a.lng]));
+  const bounds = L.latLngBounds(latlngs);
+  map.flyToBounds(bounds, { padding:[80, 80], duration:1.6, easeLinearity:0.4, maxZoom:7 });
+}
+
+function fillPanel(key) {
+  const p = PRODUCE[key], w = wxData[key];
+  const ov = OVERRIDES[key];
+  const r = ov ? { ...p.r, name: ov.region.name } : p.r;
+  const wx = w ? classifyWx(w.tempC, w.precip7mm) : null;
+
+  const emojiEl = document.getElementById('d-emoji');
+  if (typeof p.emoji === 'string' && p.emoji.trim().startsWith('<svg')) {
+    emojiEl.innerHTML = p.emoji;
+  } else {
+    emojiEl.textContent = p.emoji;
+  }
+  document.getElementById('d-name').textContent   = p.name.toUpperCase();
+
+  // Region line — show vendor if override has one
+  const regionEl = document.getElementById('d-region');
+  let regionText = `${r.name} · ${r.share}% of US supply`;
+  if (ov && ov.vendor) regionText += ` · ${ov.vendor}`;
+  regionEl.textContent = regionText;
+
+  // Badge driven by wx condition
+  const bd = document.getElementById('d-badge');
+  if (wx) {
+    const c = wx.color;
+    const ri = parseInt(c.slice(1,3),16), gi = parseInt(c.slice(3,5),16), bi = parseInt(c.slice(5,7),16);
+    bd.textContent = wx.label;
+    bd.style.background = `rgba(${ri},${gi},${bi},0.15)`;
+    bd.style.color = c; bd.style.border = `1px solid ${c}`;
+  } else {
+    bd.textContent = '…'; bd.style.background = 'transparent';
+    bd.style.color = 'rgba(255,255,255,.3)'; bd.style.border = '1px solid rgba(255,255,255,.1)';
+  }
+
+  document.getElementById('ds-temp').textContent  = w ? `${w.tempF}°F` : '…';
+  document.getElementById('ds-rain').textContent  = w ? `${w.precip7mm}mm` : '…';
+  document.getElementById('ds-rain-s').textContent = w ? `past 7 days` : '';
+  const cv = document.getElementById('ds-cond');
+  cv.textContent = wx ? `${wx.emoji} ${wx.label}` : '…';
+  cv.style.color = wx ? wx.color : '#fff'; cv.style.fontSize = '15px';
+  document.getElementById('ds-cond-s').textContent = w ? `${w.tempF > 50 ? 'Growing season' : 'Off season'}` : '';
+  document.getElementById('ds-share').textContent  = `${r.share}%`;
+  document.getElementById('d-note').textContent    = r.note;
+  document.getElementById('d-usda').innerHTML      = `📋 USDA: <a href="${p.usda.pdf}" target="_blank">${p.usda.n} ↗</a>`;
+
+  // ── SEASON CHART with bell curve overlay ──
+  const sc = document.getElementById('d-season');
+  if (p.season) {
+    const now = new Date().getMonth(); // 0=Jan
+    const MONTHS = ['J','F','M','A','M','J','J','A','S','O','N','D'];
+    const peak = Math.max(...p.season);
+    // Build bars
+    const barsHTML = p.season.map((v, i) => {
+      const pct = Math.round((v / 1.0) * 100);
+      const isNow = i === now;
+      const barColor = isNow
+        ? `rgba(57,224,122,${0.4 + v * 0.6})`
+        : v >= 0.8 ? `rgba(57,224,122,${0.25 + v * 0.4})`
+        : v >= 0.5 ? `rgba(57,224,122,${0.15 + v * 0.3})`
+        : `rgba(255,255,255,${0.05 + v * 0.1})`;
+      return `<div class="sc-bar" style="height:${Math.max(3, pct)}%;background:${barColor};${isNow ? 'box-shadow:0 0 6px rgba(57,224,122,.5)' : ''}"></div>`;
+    }).join('');
+
+    // Bell curve SVG overlay — smooth gaussian-ish path through the season values
+    const W = 276, H = 28; // approximate rendered width / height
+    const pts = p.season.map((v, i) => {
+      const x = (i / 11) * W;
+      const y = H - (v / 1.0) * H;
+      return `${x},${y}`;
+    });
+    // Smooth via cubic bezier through control points
+    const pathD = pts.reduce((acc, pt, i, arr) => {
+      if (i === 0) return `M ${pt}`;
+      const prev = arr[i - 1].split(',').map(Number);
+      const curr = pt.split(',').map(Number);
+      const cpx = (prev[0] + curr[0]) / 2;
+      return `${acc} C ${cpx},${prev[1]} ${cpx},${curr[1]} ${curr[0]},${curr[1]}`;
+    }, '');
+
+    const monthsHTML = MONTHS.map((m, i) =>
+      `<div class="sc-mon${i === now ? ' now' : ''}">${m}</div>`
+    ).join('');
+
+    // Current month indicator line
+    const nowX = (now / 11) * 100;
+
+    sc.innerHTML = `
+      <div class="sc-label">Growing Season</div>
+      <div class="sc-wrap">
+        <div class="sc-bars">${barsHTML}</div>
+        <svg class="sc-curve" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="${pathD}" stroke="rgba(57,224,122,0.7)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="sc-months">${monthsHTML}</div>`;
+  } else {
+    sc.innerHTML = '';
+  }
+
+  // ── 5-DAY EMOJI FORECAST ──
+  const fc = document.getElementById('d-forecast');
+  if (w && w.daily5 && w.daily5.length) {
+    const maxPrecip = Math.max(...w.daily5.map(d => d.precip), 1);
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const dayHTML = w.daily5.map(d => {
+      const dt   = new Date(d.date + 'T12:00:00');
+      const dow  = days[dt.getDay()];
+      const dayWx = classifyWx(d.tempC, d.precip);
+      const barPct = Math.round((d.precip / maxPrecip) * 100);
+      return `<div class="fc-day">
+        <div class="fc-dow">${dow}</div>
+        <div class="fc-ico">${dayWx.emoji}</div>
+        <div class="fc-tmp">${d.tempF}°</div>
+        <div class="fc-bar"><div class="fc-bar-fill" style="width:${barPct}%"></div></div>
+      </div>`;
+    }).join('');
+    fc.innerHTML = `<div class="fc-label">5-Day History</div><div class="fc-days">${dayHTML}</div>`;
+  } else {
+    fc.innerHTML = '';
+  }
+}
+
+// ── CLOSE PANEL ──
+function closePanel() {
+  const el = document.getElementById('detail');
+  el.style.transition = 'transform .25s cubic-bezier(.4,0,.2,1), opacity .2s';
+  el.style.transform = 'translateY(110%)';
+  el.style.opacity = '0';
+  setTimeout(() => {
+    el.style.display = 'none';
+    el.style.transform = '';
+    el.style.opacity = '';
+    el.style.transition = '';
+  }, 260);
+  activeKey = null;
+  buildPills();
+  clearSecondary();
+  clearFocusedWx();
+  showAllWxMarkers();
+  showAll();
+}
+
+document.getElementById('d-close').onclick = closePanel;
+
+// Tap map to close on mobile
+map.on('click', () => {
+  if (activeKey && window.innerWidth <= 768) closePanel();
+});
+
+// ── SWIPE TO CLOSE / DRAG DRAWER ──
+(function() {
+  const el = document.getElementById('detail');
+  let startY = 0, startX = 0, currentY = 0, dragging = false;
+  const CLOSE_THRESHOLD = 80; // px pulled down to trigger close
+
+  el.addEventListener('touchstart', e => {
+    if (window.innerWidth > 768) return;
+    // Only start drag if touching the handle area (top 48px of panel)
+    const touch = e.touches[0];
+    const rect = el.getBoundingClientRect();
+    if (touch.clientY - rect.top > 48) return;
+    startY = touch.clientY;
+    startX = touch.clientX;
+    currentY = 0;
+    dragging = true;
+    el.style.transition = 'none';
+  }, { passive: true });
+
+  el.addEventListener('touchmove', e => {
+    if (!dragging || window.innerWidth > 768) return;
+    const touch = e.touches[0];
+    const diffX = Math.abs(touch.clientX - startX);
+    currentY = touch.clientY - startY;
+    // Only track downward vertical movement, ignore horizontal scrolling
+    if (diffX > 20 || currentY < 0) { dragging = false; return; }
+    el.style.transform = `translateY(${currentY}px)`;
+    el.style.opacity = `${Math.max(0.3, 1 - currentY / 250)}`;
+  }, { passive: true });
+
+  el.addEventListener('touchend', () => {
+    if (!dragging || window.innerWidth > 768) return;
+    dragging = false;
+    if (currentY > CLOSE_THRESHOLD) {
+      closePanel();
+    } else {
+      // Snap back
+      el.style.transition = 'transform .2s cubic-bezier(.4,0,.2,1), opacity .15s';
+      el.style.transform = '';
+      el.style.opacity = '';
+      setTimeout(() => { el.style.transition = ''; }, 200);
+    }
+  });
+})();
+
+// ══════════════════════════════════════════════════════════
+//  PILLS + CATEGORY TABS
+// ══════════════════════════════════════════════════════════
+let activeCat = 'all';
+
+function buildPills() {
+  const container = document.getElementById('pills');
+  container.innerHTML = '';
+  Object.entries(PRODUCE).forEach(([key, p]) => {
+    if (activeCat !== 'all' && p.cat !== activeCat) return;
+    const btn = document.createElement('button');
+    btn.className = 'pill'; btn.dataset.key = key;
+    btn.innerHTML = `<span style="font-size:14px">${p.emoji}</span>${p.name}`;
+    if (key === activeKey) btn.classList.add('active');
+    btn.onclick = () => {
+      if (activeKey === key) {
+        closePanel();
+      } else { openPanel(key); }
+    };
+    container.appendChild(btn);
+  });
+}
+
+document.querySelectorAll('.cat-tab').forEach(tab => {
+  tab.onclick = () => {
+    activeCat = tab.dataset.cat;
+    document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    buildPills();
+  };
+});
+
+buildPills();
+
+// ── INIT — markers placed + weather fetched + sheet loaded ──
+Object.entries(PRODUCE).forEach(([key, p]) => {
+  createProduceMarker(key);
+  fetchWx(key, p.r.lat, p.r.lng, true);
+});
+STATIONS.forEach(st => fetchWx(st.id, st.lat, st.lng, false));
+loadSheet();
+</script>
+</body>
+</html>
