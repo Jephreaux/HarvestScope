@@ -115,7 +115,9 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
   background:var(--panel-bg); border:1px solid var(--border); border-radius:13px;
   backdrop-filter:blur(28px); padding:10px 12px; display:none;
   animation:sup .2s ease; overflow-y:auto;
+  scrollbar-width:none;
 }
+#detail::-webkit-scrollbar { display:none; }
 @keyframes sup { from{opacity:0;transform:translateX(10px)} to{opacity:1;transform:translateX(0)} }
 #d-close { position:absolute; top:8px; right:10px; font-size:14px; color:rgba(255,255,255,.28); cursor:pointer; background:none; border:none; transition:color .12s; }
 #d-close:hover { color:#fff; }
@@ -192,7 +194,7 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
    MOBILE LAYOUT — bottom drawer panel, single-row pills
    ══════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
-  /* Panel becomes bottom drawer */
+  /* Panel becomes bottom drawer — peek state by default */
   #detail {
     top: auto !important;
     bottom: 0 !important;
@@ -200,23 +202,25 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
     left: 0 !important;
     width: 100% !important;
     max-height: 58vh !important;
+    height: 58vh !important;
     border-radius: 18px 18px 0 0 !important;
     border-left: none !important;
     border-right: none !important;
     border-bottom: none !important;
     padding: 14px 16px 120px !important;
-    animation: slideup .28s cubic-bezier(.32,1,.4,1) !important;
+    overflow-y: auto !important;
+    /* Start in peek position — just handle + name showing */
+    transform: translateY(calc(100% - 72px));
+    transition: transform .3s cubic-bezier(.32,1,.4,1);
   }
-  #detail.closing {
-    animation: slidedown .22s ease-in forwards !important;
+  /* Full open state */
+  #detail.drawer-full {
+    transform: translateY(0) !important;
   }
-  @keyframes slideup {
-    from { opacity:0; transform:translateY(100%); }
-    to   { opacity:1; transform:translateY(0); }
-  }
-  @keyframes slidedown {
-    from { opacity:1; transform:translateY(0); }
-    to   { opacity:0; transform:translateY(100%); }
+  /* Closed state */
+  #detail.drawer-closing {
+    transform: translateY(110%) !important;
+    transition: transform .22s ease-in !important;
   }
 
   /* Drag handle visual hint */
@@ -226,10 +230,11 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
     width:40px; height:4px;
     background:rgba(255,255,255,.25);
     border-radius:2px;
-    margin:0 auto 12px;
+    margin:0 auto 10px;
+    flex-shrink:0;
   }
 
-  /* Bigger, easier-to-tap close button on mobile */
+  /* Bigger close button on mobile */
   #d-close {
     top:10px !important;
     right:12px !important;
@@ -250,7 +255,7 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
   .ds:nth-child(2) { border-right:none; }
   .ds:nth-child(3), .ds:nth-child(4) { border-bottom:none; }
 
-  /* Picker — sits at very bottom, above drawer */
+  /* Picker tighter */
   #picker { padding:6px 12px 14px; }
   #cat-tabs { gap:5px; margin-bottom:6px; }
   .cat-tab { font-size:8px; padding:3px 8px; }
@@ -262,10 +267,10 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
   #logo-name { font-size:20px; }
   #logo-sub  { font-size:8px; letter-spacing:2px; }
 
-  /* Move zoom controls so they don't overlap panel */
+  /* Zoom controls above picker */
   .leaflet-control-zoom { margin-bottom: 110px !important; }
 
-  /* Season chart slightly taller bars on mobile */
+  /* Season chart */
   .sc-wrap { height:52px; }
   .sc-bars { height:32px; }
   .sc-curve { height:32px; }
@@ -324,6 +329,9 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
 const map = L.map('map', {
   center: [35, -105],  // Western Americas bias — WA down to Chile all visible
   zoom: 3,
+  minZoom: 2,
+  maxBounds: [[-70, -175], [80, 20]],  // Americas + Europe, no infinite scroll
+  maxBoundsViscosity: 0.85,
   zoomControl: false,
   attributionControl: false,
 });
@@ -338,58 +346,38 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/
 // ══════════════════════════════════════════════════════════
 //  PRODUCE — one primary sourcing region per item
 // ══════════════════════════════════════════════════════════
-// Inline SVG icons for produce that have no good emoji
-const SVG = {
-  broccolini: `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <!-- stalk -->
-    <rect x="12" y="12" width="2" height="12" fill="#4a8c3f"/>
-    <!-- side branches -->
-    <line x1="13" y1="17" x2="8"  y2="13" stroke="#4a8c3f" stroke-width="1.5" stroke-linecap="round"/>
-    <line x1="13" y1="15" x2="18" y2="11" stroke="#4a8c3f" stroke-width="1.5" stroke-linecap="round"/>
-    <!-- florets -->
-    <circle cx="13" cy="7"  r="4"   fill="#2d7a2a"/>
-    <circle cx="8"  cy="11" r="3"   fill="#2d7a2a"/>
-    <circle cx="18" cy="9"  r="3"   fill="#2d7a2a"/>
-    <circle cx="10" cy="7"  r="2.5" fill="#3a8c36"/>
-    <circle cx="16" cy="7"  r="2.5" fill="#3a8c36"/>
-  </svg>`,
-
-  asparagus: `<img src="data:image/png;base64,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" width="36" height="36" style="object-fit:contain">`,
-
-  green_onion: `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <!-- white bulb -->
-    <ellipse cx="13" cy="22" rx="5" ry="3.5" fill="#e8ede0" stroke="#c8d4b8" stroke-width="0.8"/>
-    <!-- roots -->
-    <line x1="10" y1="24" x2="9"  y2="26" stroke="#c8d4b8" stroke-width="0.8" stroke-linecap="round"/>
-    <line x1="13" y1="25" x2="13" y2="26" stroke="#c8d4b8" stroke-width="0.8" stroke-linecap="round"/>
-    <line x1="16" y1="24" x2="17" y2="26" stroke="#c8d4b8" stroke-width="0.8" stroke-linecap="round"/>
-    <!-- stalks -->
-    <path d="M10 20 Q9 14 10 8 Q10.5 4 11 2" stroke="#4a8c3f" stroke-width="2" stroke-linecap="round" fill="none"/>
-    <path d="M13 19 Q13 12 13 6 Q13 3 13 1" stroke="#3a8040" stroke-width="2.2" stroke-linecap="round" fill="none"/>
-    <path d="M16 20 Q17 14 16 8 Q15.5 4 15 2" stroke="#4a8c3f" stroke-width="2" stroke-linecap="round" fill="none"/>
-  </svg>`,
-
-  cauliflower: `<svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <!-- leaves -->
-    <path d="M5 16 Q2 10 6 8 Q9 12 8 16Z" fill="#4a8c3f"/>
-    <path d="M21 16 Q24 10 20 8 Q17 12 18 16Z" fill="#4a8c3f"/>
-    <path d="M8 18 Q5 14 7 11 Q11 14 10 18Z" fill="#3a8040"/>
-    <path d="M18 18 Q21 14 19 11 Q15 14 16 18Z" fill="#3a8040"/>
-    <!-- curd bumps -->
-    <circle cx="13" cy="9"  r="4.5" fill="#f0ede0"/>
-    <circle cx="8"  cy="12" r="3.5" fill="#ece9d8"/>
-    <circle cx="18" cy="12" r="3.5" fill="#ece9d8"/>
-    <circle cx="10" cy="8"  r="3"   fill="#f4f1e4"/>
-    <circle cx="16" cy="8"  r="3"   fill="#f4f1e4"/>
-    <circle cx="13" cy="6"  r="3"   fill="#f8f5ec"/>
-    <!-- texture bumps -->
-    <circle cx="11" cy="10" r="1.2" fill="#e0dcc8"/>
-    <circle cx="15" cy="10" r="1.2" fill="#e0dcc8"/>
-    <circle cx="13" cy="12" r="1.2" fill="#e0dcc8"/>
-    <circle cx="9"  cy="13" r="1"   fill="#dbd7c4"/>
-    <circle cx="17" cy="13" r="1"   fill="#dbd7c4"/>
-  </svg>`,
+// ── ICON FILE REFERENCES ──
+const ICONS = {
+  avocado:    '/icons/avocado.png',
+  strawberry: '/icons/strawberry.png',
+  apple:      '/icons/apple.png',
+  blueberry:  '/icons/blueberry.png',
+  tomato:     '/icons/tomato.png',
+  orange:     '/icons/orange.png',
+  grape:      '/icons/grape.png',
+  mango:      '/icons/mango.png',
+  lettuce:    '/icons/lettuce.png',
+  potato:     '/icons/potato.png',
+  onion:      '/icons/onion.png',
+  broccolini: '/icons/broccolini.png',
+  asparagus:  '/icons/asparagus.png',
+  green_onion:'/icons/green_onion.png',
+  cauliflower:'/icons/cauliflower.png',
+  raspberry:  '/icons/raspberry.png',
+  cantaloupe: '/icons/cantaloupe.png',
+  watermelon: '/icons/watermelon.png',
+  mushroom:   '/icons/mushroom.png',
+  carrot:     '/icons/carrot.png',
+  broccoli:   '/icons/broccoli.png',
 };
+
+// Returns an <img> tag for map pins and panel header
+function iconImg(key, size) {
+  size = size || 36;
+  const src = ICONS[key];
+  if (src) return '<img src="' + src + '" width="' + size + '" height="' + size + '" style="object-fit:contain;display:block" draggable="false">';
+  return PRODUCE[key] ? PRODUCE[key].emoji : '?';
+}
 
 // WA-perspective sourcing: closest/most likely origin for a Seattle-area grocery store
 // season: 12 values Jan-Dec, 0=unavailable, 0.1-0.4=light, 0.5-0.7=good, 0.8-1.0=peak
@@ -495,14 +483,14 @@ const PRODUCE = {
           { name:'Chihuahua, MX',       flag:'🇲🇽', lat:28.6,  lng:-106.1, share:15 } ],
     usda:{ n:'Seattle SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/AR_FV120.pdf' }},
 
-  broccolini: { name:'Broccolini',  emoji:SVG.broccolini, cat:'veg',
+  broccolini: { name:'Broccolini',  emoji:'🥦', cat:'veg',
     // Salinas Apr–Oct, Yuma Nov–Mar; year-round at WA stores, peak spring/fall
     season:[0.8,0.8,0.9,1.0,1.0,0.9,0.8,0.8,0.9,1.0,0.9,0.8],
     r:  { name:'Salinas Valley, CA',    flag:'🇺🇸', lat:36.5,  lng:-121.5, share:80, base:40,  note:'Broccolini is grown almost exclusively in CA\'s Salinas Valley (summer) and Yuma, AZ (winter). Nearly every bunch in a WA store comes from one of these two spots.' },
     alt:[ { name:'Yuma, AZ',            flag:'🇺🇸', lat:32.7,  lng:-114.6, share:18 } ],
     usda:{ n:'Fresno SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/FR_FV120.pdf' }},
 
-  asparagus:  { name:'Asparagus',   emoji:SVG.asparagus, cat:'veg',
+  asparagus:  { name:'Asparagus',   emoji:'🌿', cat:'veg',
     // Apr–Jun Yakima domestic = peak quality & price; Peru available year-round at lower quality
     season:[0.5,0.5,0.7,1.0,1.0,0.8,0.6,0.5,0.5,0.5,0.5,0.5],
     r:  { name:'Ica Valley, Peru',      flag:'🇵🇪', lat:-14.0, lng:-75.5,  share:50, base:8,   note:'WA asparagus season is Apr–Jun (Yakima). The rest of the year WA stores source from Peru\'s Ica Valley, which ships year-round.' },
@@ -511,7 +499,7 @@ const PRODUCE = {
           { name:'Sonora, MX',          flag:'🇲🇽', lat:29.0,  lng:-110.9, share:10 } ],
     usda:{ n:'Miami SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/MH_FV121.pdf' }},
 
-  green_onion:{ name:'Green Onion', emoji:SVG.green_onion, cat:'veg',
+  green_onion:{ name:'Green Onion', emoji:'🧅', cat:'veg',
     // Year-round; spring Apr–Jun = freshest domestic supply, peak quality
     season:[0.8,0.8,0.9,1.0,1.0,0.9,0.8,0.8,0.8,0.8,0.8,0.8],
     r:  { name:'Baja California, MX',   flag:'🇲🇽', lat:32.5,  lng:-115.3, share:55, base:12,  note:'Mexicali and the Imperial Valley (Muranaka Farm is the dominant grower) supply most winter green onions to WA stores Nov–Apr.' },
@@ -519,7 +507,7 @@ const PRODUCE = {
           { name:'Sinaloa, MX',         flag:'🇲🇽', lat:25.0,  lng:-107.4, share:12 } ],
     usda:{ n:'Phoenix SP – Vegetables', pdf:'https://www.ams.usda.gov/mnreports/IX_FV120.pdf' }},
 
-  cauliflower:{ name:'Cauliflower', emoji:SVG.cauliflower, cat:'veg',
+  cauliflower:{ name:'Cauliflower', emoji:'⚪', cat:'veg',
     // Salinas year-round; Oct–Feb cool season = peak quality and lowest price
     season:[0.9,0.9,0.8,0.7,0.6,0.6,0.6,0.7,0.8,1.0,1.0,0.9],
     r:  { name:'Salinas Valley, CA',    flag:'🇺🇸', lat:36.4,  lng:-121.4, share:75, base:40,  note:'Salinas Valley produces ~75% of US cauliflower. The cool coastal fog is essential — heat causes browning. WA stores source from here year-round.' },
@@ -863,7 +851,7 @@ function pinHTML(key) {
   const condColor = wx ? wx.color : 'rgba(255,255,255,.3)';
   const condText  = wx ? wx.label : '…';
   return `<div class="pin" data-key="${key}">
-    <div class="pin-bubble" style="${bubbleStyle}">${pulse}${p.emoji}${badge}</div>
+    <div class="pin-bubble" style="${bubbleStyle}">${pulse}${iconImg(key, 30)}${badge}</div>
     <div class="pin-label">
       <div class="pin-temp">${w ? w.tempF+'°' : '…'}</div>
       <div class="pin-cond" style="color:${condColor}">${condText}</div>
@@ -956,26 +944,8 @@ function clearFocusedWx() {
 function showFocusedWx(key) {
   clearFocusedWx();
   hideAllWxMarkers();
-
-  // Show wx at primary region using already-fetched produce weather data
-  const w = wxData[key];
-  const p = PRODUCE[key];
-  if (w) {
-    const wx = classifyWx(w.tempC, w.precip7mm);
-    if (wx) {
-      const icon = L.divIcon({
-        className: '',
-        html: `<div class="wx">
-          <div class="wx-ico">${wx.emoji}</div>
-          <div class="wx-tag" style="color:${wx.color};border-color:${wx.color}55">${wx.label}</div>
-        </div>`,
-        iconSize: [70, 52], iconAnchor: [35, 26],
-      });
-      const m = L.marker([p.r.lat, p.r.lng], { icon, interactive:false, zIndexOffset:-50 });
-      m.addTo(map);
-      focusedWxMarkers.push(m);
-    }
-  }
+  // Don't place wx at primary pin location — the produce pin already shows
+  // weather condition via badge and glow color. Only show wx at alt regions.
 }
 
 // ══════════════════════════════════════════════════════════
@@ -996,7 +966,7 @@ function showSecondary(key) {
     const icon = L.divIcon({
       className: '',
       html: `<div class="pin-sec">
-        <div class="pin-sec-bubble">${p.emoji}</div>
+        <div class="pin-sec-bubble">${iconImg(key, 22)}</div>
         <div class="pin-sec-label">
           <div class="pin-sec-name">${a.name}</div>
           <div class="pin-sec-share">${a.share}% of supply</div>
@@ -1011,27 +981,7 @@ function showSecondary(key) {
   });
 }
 
-// ══════════════════════════════════════════════════════════
-//  DETAIL PANEL
-// ══════════════════════════════════════════════════════════
-function openPanel(key) {
-  activeKey = key;
-  buildPills(); // rebuilds with correct active state
-  fillPanel(key);
-  document.getElementById('detail').style.display = 'block';
-  hideOthers(key);
-  showSecondary(key);
-  showFocusedWx(key);
-
-  // Fit map to primary + all secondary regions
-  const p = PRODUCE[key];
-  const ov = OVERRIDES[key];
-  const primaryLatLng = ov ? [ov.region.lat, ov.region.lng] : [p.r.lat, p.r.lng];
-  const latlngs = [primaryLatLng];
-  (p.alt || []).forEach(a => latlngs.push([a.lat, a.lng]));
-  const bounds = L.latLngBounds(latlngs);
-  map.flyToBounds(bounds, { padding:[80, 80], duration:1.6, easeLinearity:0.4, maxZoom:7 });
-}
+// ── DETAIL PANEL ──
 
 function fillPanel(key) {
   const p = PRODUCE[key], w = wxData[key];
@@ -1040,11 +990,7 @@ function fillPanel(key) {
   const wx = w ? classifyWx(w.tempC, w.precip7mm) : null;
 
   const emojiEl = document.getElementById('d-emoji');
-  if (typeof p.emoji === 'string' && p.emoji.trim().startsWith('<svg')) {
-    emojiEl.innerHTML = p.emoji;
-  } else {
-    emojiEl.textContent = p.emoji;
-  }
+  emojiEl.innerHTML = iconImg(key, 40);
   document.getElementById('d-name').textContent   = p.name.toUpperCase();
 
   // Region line — show vendor if override has one
@@ -1075,7 +1021,7 @@ function fillPanel(key) {
   document.getElementById('ds-cond-s').textContent = w ? `${w.tempF > 50 ? 'Growing season' : 'Off season'}` : '';
   document.getElementById('ds-share').textContent  = `${r.share}%`;
   document.getElementById('d-note').textContent    = r.note;
-  document.getElementById('d-usda').innerHTML      = `📋 USDA: <a href="${p.usda.pdf}" target="_blank">${p.usda.n} ↗</a>`;
+  document.getElementById('d-usda').innerHTML = `📖 <a href="https://en.wikipedia.org/wiki/${encodeURIComponent(p.name)}" target="_blank">Wikipedia: ${p.name} ↗</a>`;
 
   // ── SEASON CHART with bell curve overlay ──
   const sc = document.getElementById('d-season');
@@ -1154,74 +1100,150 @@ function fillPanel(key) {
   }
 }
 
-// ── CLOSE PANEL ──
-function closePanel() {
-  const el = document.getElementById('detail');
-  el.style.transition = 'transform .25s cubic-bezier(.4,0,.2,1), opacity .2s';
-  el.style.transform = 'translateY(110%)';
-  el.style.opacity = '0';
-  setTimeout(() => {
-    el.style.display = 'none';
-    el.style.transform = '';
-    el.style.opacity = '';
-    el.style.transition = '';
-  }, 260);
-  activeKey = null;
+// ── DRAWER STATE MACHINE (mobile: peek → full → closed) ──
+// Desktop: panel just shows/hides instantly, no states
+const isMobile = () => window.innerWidth <= 768;
+
+function openPanel(key) {
+  const alreadyActive = activeKey === key;
+  activeKey = key;
   buildPills();
-  clearSecondary();
-  clearFocusedWx();
-  showAllWxMarkers();
-  showAll();
+  fillPanel(key);
+
+  const el = document.getElementById('detail');
+  if (isMobile()) {
+    el.style.display = 'block';
+    el.style.transition = '';
+    el.style.transform = '';
+    el.classList.remove('drawer-full', 'drawer-closing');
+    // Start at peek — translateY(calc(100% - 72px)) set in CSS
+    // Tap on peeked header expands to full
+    if (alreadyActive && el.classList.contains('drawer-full')) {
+      // Already full — clicking again does nothing (pill toggle handles close)
+      return;
+    }
+    // Small delay so CSS transition fires
+    requestAnimationFrame(() => {
+      // already in peek state via CSS default
+    });
+  } else {
+    el.style.display = 'block';
+  }
+
+  hideOthers(key);
+  showSecondary(key);
+  showFocusedWx(key);
+
+  const p = PRODUCE[key];
+  const ov = OVERRIDES[key];
+  const primaryLatLng = ov ? [ov.region.lat, ov.region.lng] : [p.r.lat, p.r.lng];
+  const latlngs = [primaryLatLng];
+  (p.alt || []).forEach(a => latlngs.push([a.lat, a.lng]));
+  const bounds = L.latLngBounds(latlngs);
+  map.flyToBounds(bounds, { padding:[80, 80], duration:1.6, easeLinearity:0.4, maxZoom:7 });
+}
+
+function expandDrawer() {
+  if (!isMobile()) return;
+  const el = document.getElementById('detail');
+  el.classList.add('drawer-full');
+}
+
+// hideDrawer: hide panel but KEEP selection (pin stays highlighted)
+function hideDrawer() {
+  const el = document.getElementById('detail');
+  if (isMobile()) {
+    el.classList.add('drawer-closing');
+    el.classList.remove('drawer-full');
+    setTimeout(() => {
+      el.style.display = 'none';
+      el.classList.remove('drawer-closing');
+    }, 230);
+  } else {
+    el.style.display = 'none';
+  }
+  // Keep activeKey — selection preserved
+  buildPills(); // keeps active pill highlighted
+}
+
+// closePanel: full deselect — hides panel AND clears selection
+function closePanel() {
+  hideDrawer();
+  setTimeout(() => {
+    activeKey = null;
+    buildPills();
+    clearSecondary();
+    clearFocusedWx();
+    showAllWxMarkers();
+    showAll();
+  }, isMobile() ? 230 : 0);
 }
 
 document.getElementById('d-close').onclick = closePanel;
 
-// Tap map to close on mobile
+// Tap map: just hide drawer, keep selection
 map.on('click', () => {
-  if (activeKey && window.innerWidth <= 768) closePanel();
+  if (activeKey && isMobile()) hideDrawer();
 });
 
-// ── SWIPE TO CLOSE / DRAG DRAWER ──
+// ── SWIPE / DRAG GESTURE ──
 (function() {
   const el = document.getElementById('detail');
-  let startY = 0, startX = 0, currentY = 0, dragging = false;
-  const CLOSE_THRESHOLD = 80; // px pulled down to trigger close
+  let startY = 0, startX = 0, currentY = 0, dragging = false, startFull = false;
 
   el.addEventListener('touchstart', e => {
-    if (window.innerWidth > 768) return;
-    // Only start drag if touching the handle area (top 48px of panel)
+    if (!isMobile()) return;
     const touch = e.touches[0];
     const rect = el.getBoundingClientRect();
-    if (touch.clientY - rect.top > 48) return;
+    // Only initiate drag from top 56px (handle zone)
+    if (touch.clientY - rect.top > 56) return;
     startY = touch.clientY;
     startX = touch.clientX;
     currentY = 0;
     dragging = true;
+    startFull = el.classList.contains('drawer-full');
     el.style.transition = 'none';
   }, { passive: true });
 
   el.addEventListener('touchmove', e => {
-    if (!dragging || window.innerWidth > 768) return;
+    if (!dragging || !isMobile()) return;
     const touch = e.touches[0];
     const diffX = Math.abs(touch.clientX - startX);
     currentY = touch.clientY - startY;
-    // Only track downward vertical movement, ignore horizontal scrolling
-    if (diffX > 20 || currentY < 0) { dragging = false; return; }
-    el.style.transform = `translateY(${currentY}px)`;
-    el.style.opacity = `${Math.max(0.3, 1 - currentY / 250)}`;
+    if (diffX > 20) { dragging = false; return; }
+    if (!startFull && currentY < 0) {
+      // Dragging up from peek → expand (no visual drag, just snap)
+      dragging = false;
+      expandDrawer();
+      return;
+    }
+    if (currentY < 0) return; // don't drag upward past full
+    el.style.transform = `translateY(${startFull ? currentY : 'calc(100% - 72px + ' + currentY + 'px)'})`;
+    el.style.opacity = `${Math.max(0.3, 1 - currentY / 300)}`;
   }, { passive: true });
 
   el.addEventListener('touchend', () => {
-    if (!dragging || window.innerWidth > 768) return;
+    if (!dragging || !isMobile()) return;
     dragging = false;
-    if (currentY > CLOSE_THRESHOLD) {
+    el.style.transition = '';
+    el.style.opacity = '';
+    el.style.transform = '';
+
+    if (startFull && currentY > 80) {
+      // Dragged down from full → back to peek
+      el.classList.remove('drawer-full');
+    } else if (!startFull && currentY > 60) {
+      // Dragged down from peek → close
       closePanel();
-    } else {
-      // Snap back
-      el.style.transition = 'transform .2s cubic-bezier(.4,0,.2,1), opacity .15s';
-      el.style.transform = '';
-      el.style.opacity = '';
-      setTimeout(() => { el.style.transition = ''; }, 200);
+    }
+    // Otherwise snap back to current state
+  });
+
+  // Tap on peeked panel (not handle zone) → expand
+  el.addEventListener('click', e => {
+    if (!isMobile()) return;
+    if (!el.classList.contains('drawer-full')) {
+      expandDrawer();
     }
   });
 })();
@@ -1238,14 +1260,13 @@ function buildPills() {
     if (activeCat !== 'all' && p.cat !== activeCat) return;
     const btn = document.createElement('button');
     btn.className = 'pill'; btn.dataset.key = key;
-    btn.innerHTML = `<span style="font-size:14px">${p.emoji}</span>${p.name}`;
+    btn.innerHTML = `<span style="width:18px;height:18px;display:inline-flex;align-items:center">${iconImg(key, 18)}</span>${p.name}`;
     if (key === activeKey) btn.classList.add('active');
     btn.onclick = () => {
       if (activeKey === key) {
         closePanel();
       } else { openPanel(key); }
-    };
-    container.appendChild(btn);
+    };    container.appendChild(btn);
   });
 }
 
