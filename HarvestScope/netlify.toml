@@ -1,9 +1,10 @@
 [build]
   publish = "."
-  functions = "netlify/functions"
+  functions = "HarvestScope/functions"
 
 [[headers]]
   for = "/*"
   [headers.values]
 
     Cache-Control = "public, max-age=3600"
+
