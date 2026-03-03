@@ -1,10 +1,11 @@
 [build]
   publish = "."
-  functions = "HarvestScope/functions"
+  functions = "functions"
 
 [[headers]]
   for = "/*"
   [headers.values]
 
     Cache-Control = "public, max-age=3600"
+
 
