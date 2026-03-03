@@ -1,11 +1,16 @@
+
 [build]
   publish = "."
   functions = "functions"
 
+[functions]
+  node_bundler = "esbuild"
+
+[build.environment]
+  NODE_VERSION = "18"
+
 [[headers]]
   for = "/*"
   [headers.values]
-
     Cache-Control = "public, max-age=3600"
-
 
