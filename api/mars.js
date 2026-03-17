@@ -94,10 +94,21 @@ export default async function handler(req, res) {
       const reportDate = metaRows[0].report_date || metaRows[0].Report_Date;
       if (!reportDate) continue;
 
-      // Step 2: fetch actual price line items for that date
-      const dataRes = await fetch(`${MARS_BASE}/${slug}?report_date=${encodeURIComponent(reportDate)}`, {
+      // Step 2: fetch actual price line items — date in path as YYYY-MM-DD
+      const [mm, dd, yyyy] = reportDate.split('/');
+      const datePath = `${yyyy}-${mm}-${dd}`;
+      const dataRes = await fetch(`${MARS_BASE}/${slug}/${datePath}`, {
         headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
       });
+
+      if (debugMode) {
+        const rawDbg = await dataRes.text();
+        let jsonDbg;
+        try { jsonDbg = JSON.parse(rawDbg); } catch(e) { return res.status(200).json({ slug, reportDate, datePath, status: dataRes.status, raw: rawDbg.slice(0, 500) }); }
+        const rows = jsonDbg.results || jsonDbg.report || (Array.isArray(jsonDbg) ? jsonDbg : []);
+        return res.status(200).json({ slug, reportDate, datePath, status: dataRes.status, totalRows: rows.length, samples: rows.slice(0,3).map(r => ({ keys: Object.keys(r), row: r })) });
+      }
+
       if (!dataRes.ok) continue;
 
       const rawText = await dataRes.text();
@@ -106,11 +117,6 @@ export default async function handler(req, res) {
 
       const allRows = json.results || json.report || (Array.isArray(json) ? json : []);
       if (!allRows.length) continue;
-
-      if (debugMode) {
-        const samples = allRows.slice(0, 5).map(r => ({ keys: Object.keys(r), row: r }));
-        return res.status(200).json({ slug, reportDate, totalRows: allRows.length, samples });
-      }
 
       // Filter rows to this commodity (case-insensitive, partial match handles plurals)
       const searchName = mapping.name.toLowerCase();
