@@ -37,8 +37,8 @@ const COMMODITY_MAP = {
 };
 
 // Parse supply signal from MARS market_condition / environment text
-function parseSupplySignal(condition = '', environment = '') {
-  const text = (condition + ' ' + environment).toUpperCase();
+function parseSupplySignal(condition = '') {
+  const text = condition.toUpperCase();
   if (text.match(/VERY LIGHT|SCARCE|SHORT SUPPLY|VERY SHORT/)) return 'SHORT';
   if (text.match(/OFFERINGS LIGHT|SUPPLIES LIGHT|LIGHT OFFERINGS|TIGHT/)) return 'TIGHT';
   if (text.match(/HEAVY|SURPLUS|OVERSUPPLY|WELL SUPPLIED|GOOD SUPPLY|AMPLE/)) return 'AMPLE';
@@ -76,83 +76,47 @@ export default async function handler(req, res) {
   }
 
   const authHeader = 'Basic ' + Buffer.from(apiKey + ':').toString('base64');
-  const debugMode = req.query.debug === '1';
 
   for (const slug of mapping.slugs) {
     try {
-      // Step 1: get the most recent report date
-      const metaRes = await fetch(`${MARS_BASE}/${slug}?lastReports=1`, {
-        headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
-      });
-      if (!metaRes.ok) continue;
-
-      let metaJson;
-      try { metaJson = JSON.parse(await metaRes.text()); } catch (e) { continue; }
-
-      const metaRows = metaJson.results || metaJson.report || (Array.isArray(metaJson) ? metaJson : []);
-      if (!metaRows.length) continue;
-      const reportDate = metaRows[0].report_date || metaRows[0].Report_Date;
-      if (!reportDate) continue;
-
-      // Step 2: fetch actual price line items from the "report details" sub-resource
+      // Fetch price line items from the "report details" sub-resource
       const dataRes = await fetch(`${MARS_BASE}/${slug}/report%20details?lastReports=1`, {
         headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
       });
-
-      if (debugMode) {
-        const rawDbg = await dataRes.text();
-        let jsonDbg;
-        try { jsonDbg = JSON.parse(rawDbg); } catch(e) { return res.status(200).json({ slug, reportDate, status: dataRes.status, raw: rawDbg.slice(0, 500) }); }
-        const rows = jsonDbg.results || jsonDbg.report || (Array.isArray(jsonDbg) ? jsonDbg : []);
-        return res.status(200).json({ slug, reportDate, status: dataRes.status, totalRows: rows.length, samples: rows.slice(0,3).map(r => ({ keys: Object.keys(r), row: r })) });
-      }
-
       if (!dataRes.ok) continue;
 
-      const rawText = await dataRes.text();
       let json;
-      try { json = JSON.parse(rawText); } catch (e) { continue; }
+      try { json = JSON.parse(await dataRes.text()); } catch (e) { continue; }
 
       const allRows = json.results || json.report || (Array.isArray(json) ? json : []);
       if (!allRows.length) continue;
 
       // Filter rows to this commodity (case-insensitive, partial match handles plurals)
       const searchName = mapping.name.toLowerCase();
-      const matched = allRows.filter(row => {
-        const rowCommodity = (
-          row.commodity_name || row.commodity || row.Commodity ||
-          row['Commodity Name'] || row.item || ''
-        ).toLowerCase();
-        return rowCommodity.includes(searchName) || searchName.includes(rowCommodity);
-      });
-
+      const matched = allRows.filter(row =>
+        (row.commodity || '').toLowerCase().includes(searchName) ||
+        searchName.includes((row.commodity || '').toLowerCase())
+      );
       if (!matched.length) continue;
 
-      // Parse entries — each row is a package/origin combination
+      // Parse entries — each row is a variety/package/origin combination
       const entries = [];
       for (const row of matched) {
-        const origin = (row.origin || row.Origin || row.district || row.District || '').trim();
-        const low    = parseFloat(row.low_price  || row.low  || row.Low  || 0);
-        const high   = parseFloat(row.high_price || row.high || row.High || 0);
-        const mLow   = parseFloat(row.mostly_low  || row.Mostly_Low  || 0);
-        const mHigh  = parseFloat(row.mostly_high || row.Mostly_High || 0);
-        const pkg    = (row.package || row.Package || row.unit || row.Unit || '').trim();
-        const cond   = (row.market_condition || row.Market_Condition || row.conditions || '').trim();
-        const env    = (row.environment || row.Environment || '').trim();
-        const date   = row.report_date || row.Report_Date || row.published_date || '';
-
-        if (!origin && !low) continue;
+        const low  = parseFloat(row.low_price  || 0);
+        const high = parseFloat(row.high_price || 0);
+        if (!row.origin && !low) continue;
 
         entries.push({
-          origin,
+          origin:      (row.origin   || '').trim(),
+          variety:     (row.variety  || '').trim(),
+          package:     (row.package  || '').trim(),
           low,
           high,
-          mostly_low:  mLow,
-          mostly_high: mHigh,
-          package: pkg,
-          condition: cond,
-          supply: parseSupplySignal(cond, env),
-          report_date: date,
+          mostly_low:  parseFloat(row.mostly_low_price  || 0),
+          mostly_high: parseFloat(row.mostly_high_price || 0),
+          condition:   (row.market_tone_comments || '').trim(),
+          supply:      parseSupplySignal(row.market_tone_comments || ''),
+          report_date: row.report_date || '',
         });
       }
 
