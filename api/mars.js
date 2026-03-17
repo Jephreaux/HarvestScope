@@ -80,15 +80,27 @@ export default async function handler(req, res) {
 
   for (const slug of mapping.slugs) {
     try {
-      // Fetch full report — MARS doesn't support q= filtering on report endpoints
-      const url = `${MARS_BASE}/${slug}?lastReports=1`;
-      const marsRes = await fetch(url, {
+      // Step 1: get the most recent report date
+      const metaRes = await fetch(`${MARS_BASE}/${slug}?lastReports=1`, {
         headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
       });
+      if (!metaRes.ok) continue;
 
-      if (!marsRes.ok) continue;
+      let metaJson;
+      try { metaJson = JSON.parse(await metaRes.text()); } catch (e) { continue; }
 
-      const rawText = await marsRes.text();
+      const metaRows = metaJson.results || metaJson.report || (Array.isArray(metaJson) ? metaJson : []);
+      if (!metaRows.length) continue;
+      const reportDate = metaRows[0].report_date || metaRows[0].Report_Date;
+      if (!reportDate) continue;
+
+      // Step 2: fetch actual price line items for that date
+      const dataRes = await fetch(`${MARS_BASE}/${slug}?report_date=${encodeURIComponent(reportDate)}`, {
+        headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
+      });
+      if (!dataRes.ok) continue;
+
+      const rawText = await dataRes.text();
       let json;
       try { json = JSON.parse(rawText); } catch (e) { continue; }
 
@@ -96,7 +108,7 @@ export default async function handler(req, res) {
       if (!allRows.length) continue;
 
       if (debugMode) {
-        return res.status(200).json({ slug, totalRows: allRows.length, firstRow: allRows[0], keys: Object.keys(allRows[0] || {}) });
+        return res.status(200).json({ slug, reportDate, totalRows: allRows.length, firstRow: allRows[0], keys: Object.keys(allRows[0] || {}) });
       }
 
       // Filter rows to this commodity (case-insensitive, partial match handles plurals)
