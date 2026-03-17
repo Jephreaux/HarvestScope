@@ -108,7 +108,8 @@ export default async function handler(req, res) {
       if (!allRows.length) continue;
 
       if (debugMode) {
-        return res.status(200).json({ slug, reportDate, totalRows: allRows.length, firstRow: allRows[0], keys: Object.keys(allRows[0] || {}) });
+        const samples = allRows.slice(0, 5).map(r => ({ keys: Object.keys(r), row: r }));
+        return res.status(200).json({ slug, reportDate, totalRows: allRows.length, samples });
       }
 
       // Filter rows to this commodity (case-insensitive, partial match handles plurals)
