@@ -80,3 +80,13 @@ The `entries` array has multiple rows per commodity — one per variety/size/pac
 `index.html` → `fetchMars()` function calls `/api/mars?commodity={key}`
 
 The frontend was updated to use the Vercel path (`/api/mars`) from the old Netlify path (`/.netlify/functions/mars`).
+
+---
+
+## Logo replacement
+The current logo is text-based (`index.html:309`):
+```html
+<div id="logo-name">🌿 HarvestScope</div>
+<div id="logo-sub">Jeffco Produce Origins &amp; Live Weather</div>
+```
+The user has an actual logo image file to use instead. Ask them to drop the file into the repo, then replace the text divs with an `<img>` tag. Keep `#logo-sub` or integrate the tagline however fits the design. Size the logo to match the current header height.
