@@ -6,27 +6,13 @@
 //
 //  Usage from app:
 //    /api/mars?commodity=asparagus
-//
-//  Returns JSON:
-//  {
-//    commodity: "ASPARAGUS",
-//    entries: [
-//      { origin: "MEXICO", low: 28.00, high: 34.00,
-//        mostly_low: 30.00, mostly_high: 32.00,
-//        package: "11 lb cartons bunched",
-//        condition: "STEADY", supply: "NORMAL",
-//        report_date: "2026-03-01" }
-//    ],
-//    supply_signal: "NORMAL",
-//    report_date: "2026-03-01",
-//    market: "San Francisco Terminal"
-//  }
 // ══════════════════════════════════════════════════════════
 
 const MARS_BASE = 'https://marsapi.ams.usda.gov/services/v1.2/reports';
 
 // Map app produce keys → MARS commodity search names + report slug IDs
-// Reports: 2322=SF Fruit, 2323=SF Vegetables, 2324=SF Onions/Potatoes
+// SF Terminal reports: 2322=Fruit, 2323=Vegetables, 2324=Onions/Potatoes
+// TODO: swap to LA Terminal slugs once confirmed (search MARS for "Los Angeles")
 const COMMODITY_MAP = {
   avocado:    { name: 'Avocados',     slugs: [2322] },
   strawberry: { name: 'Strawberries', slugs: [2322] },
@@ -76,10 +62,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'application/json');
 
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   const commodityKey = (req.query.commodity || '').toLowerCase();
   const mapping = COMMODITY_MAP[commodityKey];
@@ -93,51 +76,64 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'MARS_API_KEY not configured' });
   }
 
-  // Basic auth: key as username, no password
   const authHeader = 'Basic ' + Buffer.from(apiKey + ':').toString('base64');
-
   const _debug = [];
 
-  // Try each report slug until we get results
   for (const slug of mapping.slugs) {
     try {
-      const url = `${MARS_BASE}/${slug}?q=commodity=${encodeURIComponent(mapping.name)}&lastReports=1`;
+      // Fetch full report — MARS doesn't support q= filtering on report endpoints
+      const url = `${MARS_BASE}/${slug}?lastReports=1`;
       const marsRes = await fetch(url, {
         headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
       });
 
       if (!marsRes.ok) {
         const errText = await marsRes.text();
-        _debug.push({ slug, status: marsRes.status, error: errText.slice(0, 500) });
+        _debug.push({ slug, status: marsRes.status, error: errText.slice(0, 300) });
         continue;
       }
 
       const rawText = await marsRes.text();
       let json;
-      try { json = JSON.parse(rawText); } catch(e) {
-        _debug.push({ slug, status: marsRes.status, parseError: e.message, rawSnippet: rawText.slice(0, 500) });
+      try { json = JSON.parse(rawText); } catch (e) {
+        _debug.push({ slug, parseError: e.message, rawSnippet: rawText.slice(0, 300) });
         continue;
       }
 
-      _debug.push({ slug, status: marsRes.status, rawFirstRow: (json.results || json.report || json)[0] || json });
+      const allRows = json.results || json.report || (Array.isArray(json) ? json : []);
 
-      const results = json.results || json.report || [];
-      if (!results.length) { _debug.push({ slug, note: 'results array empty' }); continue; }
+      // Log first row so we can verify field names against live data
+      _debug.push({ slug, status: marsRes.status, totalRows: allRows.length, firstRow: allRows[0] || null });
+
+      if (!allRows.length) continue;
+
+      // Filter rows to this commodity (case-insensitive, partial match handles plurals)
+      const searchName = mapping.name.toLowerCase();
+      const matched = allRows.filter(row => {
+        const rowCommodity = (
+          row.commodity_name || row.commodity || row.Commodity ||
+          row['Commodity Name'] || row.item || ''
+        ).toLowerCase();
+        return rowCommodity.includes(searchName) || searchName.includes(rowCommodity);
+      });
+
+      _debug.push({ slug, matchedRows: matched.length });
+      if (!matched.length) continue;
 
       // Parse entries — each row is a package/origin combination
       const entries = [];
-      for (const row of results) {
-        const origin = (row.origin || row.district || '').trim();
-        const low    = parseFloat(row.low_price  || row.price_low  || 0);
-        const high   = parseFloat(row.high_price || row.price_high || 0);
-        const mLow   = parseFloat(row.mostly_low  || row.price_mostly_low  || 0);
-        const mHigh  = parseFloat(row.mostly_high || row.price_mostly_high || 0);
-        const pkg    = (row.package || row.unit || '').trim();
-        const cond   = (row.market_condition || row.conditions || '').trim();
-        const env    = (row.environment || '').trim();
-        const date   = row.report_date || row.published_date || '';
+      for (const row of matched) {
+        const origin = (row.origin || row.Origin || row.district || row.District || '').trim();
+        const low    = parseFloat(row.low_price  || row.low  || row.Low  || 0);
+        const high   = parseFloat(row.high_price || row.high || row.High || 0);
+        const mLow   = parseFloat(row.mostly_low  || row.Mostly_Low  || 0);
+        const mHigh  = parseFloat(row.mostly_high || row.Mostly_High || 0);
+        const pkg    = (row.package || row.Package || row.unit || row.Unit || '').trim();
+        const cond   = (row.market_condition || row.Market_Condition || row.conditions || '').trim();
+        const env    = (row.environment || row.Environment || '').trim();
+        const date   = row.report_date || row.Report_Date || row.published_date || '';
 
-        if (!origin && !low) continue; // skip empty rows
+        if (!origin && !low) continue;
 
         entries.push({
           origin,
@@ -163,23 +159,22 @@ export default async function handler(req, res) {
         supply_signal: overallSignal(signals),
         report_date:   reportDate,
         market:        'San Francisco Terminal',
-        slug,
+        _debug,
       });
 
     } catch (err) {
-      console.error(`MARS fetch error for slug ${slug}:`, err.message);
+      _debug.push({ slug, exception: err.message });
       continue;
     }
   }
 
-  // No data found in any report
   return res.status(200).json({
     commodity:     mapping.name,
     entries:       [],
     supply_signal: null,
     report_date:   null,
     market:        'San Francisco Terminal',
-    note:          'No data available — commodity may not be in season or report not yet published today',
+    note:          'No data available',
     _debug,
   });
 }
