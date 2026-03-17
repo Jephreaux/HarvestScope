@@ -5,26 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>HarvestScope</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet"/>
 <style>
 :root {
-  --green:#39e07a; --yellow:#f5c842; --orange:#f57c42; --red:#f5424e;
-  --panel-bg:rgba(4,9,18,0.94); --border:rgba(255,255,255,0.10);
+  --green:#7eb33a; --amber:#c8913a; --yellow:#d4973a; --orange:#d4613a; --red:#c43a3a;
+  --panel-bg:rgba(6,11,4,0.96); --border:rgba(255,255,255,0.08);
 }
 * { box-sizing:border-box; margin:0; padding:0; }
-html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans-serif; background:#050e1c; }
+html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans-serif; background:#060a04; }
 
 /* ── MAP fills everything ── */
 #map { position:absolute; inset:0; z-index:0; }
 
-/* Scanline broadcast feel */
+/* Subtle grain — texture over sterile */
 #map::after {
   content:''; position:absolute; inset:0; pointer-events:none; z-index:500;
-  background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.025) 2px,rgba(0,0,0,0.025) 3px);
+  background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.016) 2px,rgba(0,0,0,0.016) 3px);
 }
 
-/* Darken satellite tiles so neon pins pop */
-.leaflet-tile-pane { filter: brightness(0.55) saturate(0.8); }
+/* Darken satellite tiles — slightly less than before so terrain shows more */
+.leaflet-tile-pane { filter: brightness(0.60) saturate(0.75); }
 
 /* ── PRODUCE PIN markers ── */
 .pin {
@@ -46,7 +46,7 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
 @keyframes ppulse { 0%{transform:scale(1);opacity:.55} 70%{transform:scale(2.3);opacity:0} 100%{transform:scale(2.3);opacity:0} }
 .pin-wx { position:absolute; bottom:-4px; right:-6px; font-size:15px; line-height:1; filter:drop-shadow(0 1px 4px rgba(0,0,0,.9)); }
 .pin-label {
-  background:rgba(4,9,18,.86); border:1px solid rgba(255,255,255,.12);
+  background:rgba(6,11,4,.88); border:1px solid rgba(255,255,255,.11);
   border-radius:8px; padding:2px 8px;
   display:flex; flex-direction:column; align-items:center;
   backdrop-filter:blur(10px); min-width:48px;
@@ -65,7 +65,7 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
 .wx-tag {
   font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:800;
   letter-spacing:1.5px; text-transform:uppercase;
-  background:rgba(4,9,18,.78); border-radius:4px; padding:1px 5px;
+  background:rgba(6,11,4,.82); border-radius:4px; padding:1px 5px;
   border:1px solid; white-space:nowrap; backdrop-filter:blur(8px);
 }
 
@@ -73,66 +73,67 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
 #topbar {
   position:absolute; top:0; left:0; right:0; z-index:800; pointer-events:none;
   padding:10px 18px; display:flex; align-items:center; justify-content:space-between;
-  background:linear-gradient(to bottom,rgba(4,9,18,.97) 45%,transparent);
+  background:linear-gradient(to bottom,rgba(6,10,4,.97) 50%,transparent);
 }
-#logo-name { font-family:'Barlow Condensed',sans-serif; font-size:24px; font-weight:900; color:#fff; letter-spacing:1px; }
-#logo-sub  { font-family:'Barlow Condensed',sans-serif; font-size:9px; font-weight:700; letter-spacing:3px; color:var(--green); text-transform:uppercase; }
-#live-badge { display:flex; align-items:center; gap:6px; font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700; letter-spacing:2px; color:var(--green); text-transform:uppercase; }
-.ldot { width:6px; height:6px; border-radius:50%; background:var(--green); animation:blink 1.4s ease infinite; }
+#logo-img  { height:64px; }
+#logo-sub  { font-family:'Barlow Condensed',sans-serif; font-size:9px; font-weight:700; letter-spacing:3px; color:var(--amber); text-transform:uppercase; opacity:0.75; }
+#live-badge { display:flex; align-items:center; gap:6px; font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700; letter-spacing:2px; color:var(--amber); text-transform:uppercase; }
+.ldot { width:6px; height:6px; border-radius:50%; background:var(--amber); animation:blink 1.4s ease infinite; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.15} }
 
 /* ── PICKER ── */
 #picker {
   position:absolute; bottom:0; left:0; right:0; z-index:800;
   padding:8px 16px 14px;
-  background:linear-gradient(to top,rgba(4,9,18,.98) 60%,transparent);
+  background:linear-gradient(to top,rgba(6,10,4,.99) 65%,transparent);
 }
 #cat-tabs { display:flex; gap:6px; margin-bottom:7px; }
 .cat-tab {
   font-family:'Barlow Condensed',sans-serif; font-size:9px; font-weight:800;
   letter-spacing:2px; text-transform:uppercase; padding:3px 10px; border-radius:100px;
-  border:1.5px solid rgba(255,255,255,.12); background:rgba(255,255,255,.04);
-  color:rgba(255,255,255,.3); cursor:pointer; transition:all .15s;
+  border:1.5px solid rgba(255,255,255,.10); background:rgba(255,255,255,.03);
+  color:rgba(255,255,255,.28); cursor:pointer; transition:all .15s;
 }
-.cat-tab:hover { color:rgba(255,255,255,.6); border-color:rgba(255,255,255,.25); }
-.cat-tab.active { border-color:var(--green); background:rgba(57,224,122,.1); color:var(--green); }
+.cat-tab:hover { color:rgba(255,255,255,.55); border-color:rgba(255,255,255,.22); }
+.cat-tab.active { border-color:var(--amber); background:rgba(200,145,58,.12); color:var(--amber); }
 #pills { display:flex; gap:5px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
 #pills::-webkit-scrollbar { display:none; }
 .pill {
   display:flex; align-items:center; gap:5px; padding:5px 13px; border-radius:100px;
-  border:1.5px solid rgba(255,255,255,.13); background:rgba(255,255,255,.05);
-  color:rgba(255,255,255,.45); font-family:'Barlow Condensed',sans-serif;
+  border:1.5px solid rgba(255,255,255,.11); background:rgba(255,255,255,.04);
+  color:rgba(255,255,255,.4); font-family:'Barlow Condensed',sans-serif;
   font-size:13px; font-weight:700; cursor:pointer; transition:all .18s; white-space:nowrap;
   backdrop-filter:blur(6px); flex-shrink:0;
 }
-.pill:hover  { border-color:rgba(255,255,255,.3); color:rgba(255,255,255,.8); }
-.pill.active { border-color:var(--green); background:rgba(57,224,122,.12); color:#fff; box-shadow:0 0 14px rgba(57,224,122,.2); }
+.pill:hover  { border-color:rgba(255,255,255,.28); color:rgba(255,255,255,.78); }
+.pill.active { border-color:var(--green); background:rgba(126,179,58,.12); color:#e8f0d8; box-shadow:0 0 14px rgba(126,179,58,.2); }
 
 /* ── DETAIL PANEL — right side, compact ── */
 #detail {
   position:absolute; top:60px; right:14px; z-index:810;
   width:320px; max-height:calc(100vh - 170px);
-  background:var(--panel-bg); border:1px solid var(--border); border-radius:13px;
-  backdrop-filter:blur(28px); padding:10px 12px; display:none;
+  background:var(--panel-bg); border:1px solid rgba(126,179,58,0.14); border-radius:14px;
+  backdrop-filter:blur(32px); padding:10px 12px; display:none;
   animation:sup .2s ease; overflow-y:auto;
   scrollbar-width:none;
+  box-shadow:0 4px 32px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.04);
 }
 #detail::-webkit-scrollbar { display:none; }
 @keyframes sup { from{opacity:0;transform:translateX(10px)} to{opacity:1;transform:translateX(0)} }
-#d-close { position:absolute; top:8px; right:10px; font-size:14px; color:rgba(255,255,255,.28); cursor:pointer; background:none; border:none; transition:color .12s; }
-#d-close:hover { color:#fff; }
-#d-top { display:flex; align-items:center; gap:7px; margin-bottom:7px; }
+#d-close { position:absolute; top:8px; right:10px; font-size:14px; color:rgba(255,255,255,.22); cursor:pointer; background:none; border:none; transition:color .12s; }
+#d-close:hover { color:rgba(255,255,255,.7); }
+#d-top { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
 #d-emoji { font-size:24px; flex-shrink:0; }
-#d-name   { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:900; color:#fff; text-transform:uppercase; line-height:1; }
-#d-region { font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:600; letter-spacing:.5px; color:rgba(255,255,255,.38); margin-top:1px; }
+#d-name   { font-family:'Playfair Display',serif; font-size:20px; font-weight:600; font-style:italic; color:#f0f4e8; line-height:1.1; }
+#d-region { font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:600; letter-spacing:.5px; color:rgba(200,210,180,.35); margin-top:2px; text-transform:uppercase; }
 #d-badge  { margin-left:auto; flex-shrink:0; padding:2px 8px; border-radius:100px; font-family:'Barlow Condensed',sans-serif; font-size:9px; font-weight:800; letter-spacing:1px; text-transform:uppercase; }
 #d-stats  { display:flex; border-top:1px solid var(--border); border-bottom:1px solid var(--border); margin-bottom:7px; }
 .ds { flex:1; padding:5px 6px; border-right:1px solid var(--border); }
 .ds:last-child { border-right:none; }
-.ds-l { font-family:'Barlow Condensed',sans-serif; font-size:7px; font-weight:700; letter-spacing:1.5px; color:rgba(255,255,255,.28); text-transform:uppercase; margin-bottom:1px; }
-.ds-v { font-family:'Barlow Condensed',sans-serif; font-size:16px; font-weight:800; color:#fff; line-height:1; }
-.ds-s { font-size:8px; color:rgba(255,255,255,.32); margin-top:1px; }
-#d-note { font-size:11px; color:rgba(255,255,255,.45); line-height:1.4; margin-bottom:6px; }
+.ds-l { font-family:'Barlow Condensed',sans-serif; font-size:7px; font-weight:700; letter-spacing:1.5px; color:rgba(200,210,180,.28); text-transform:uppercase; margin-bottom:1px; }
+.ds-v { font-family:'Barlow Condensed',sans-serif; font-size:16px; font-weight:800; color:#f0f4e8; line-height:1; }
+.ds-s { font-size:8px; color:rgba(200,210,180,.32); margin-top:1px; }
+#d-note { font-size:11px; color:rgba(200,210,180,.45); line-height:1.4; margin-bottom:6px; }
 #d-usda { font-family:'Barlow Condensed',sans-serif; font-size:9px; letter-spacing:.4px; margin-bottom:2px; }
 #d-usda a { color:var(--green); text-decoration:none; }
 #d-usda a:hover { text-decoration:underline; }
@@ -151,7 +152,7 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
   box-shadow:0 0 10px rgba(255,255,255,.15);
 }
 .pin-sec-label {
-  background:rgba(4,9,18,.82); border:1px solid rgba(255,255,255,.18);
+  background:rgba(6,11,4,.84); border:1px solid rgba(255,255,255,.15);
   border-radius:6px; padding:2px 7px;
   display:flex; flex-direction:column; align-items:center;
 }
@@ -160,53 +161,44 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
 
 /* ── 5-DAY FORECAST ── */
 #d-forecast { margin-top:9px; border-top:1px solid var(--border); padding-top:9px; }
-.fc-label { font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:700; letter-spacing:2px; color:rgba(255,255,255,.28); text-transform:uppercase; margin-bottom:6px; }
+.fc-label { font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:700; letter-spacing:2px; color:rgba(200,210,180,.28); text-transform:uppercase; margin-bottom:6px; }
 .fc-days { display:flex; gap:4px; }
 .fc-day {
   flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
-  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.07);
-  border-radius:7px; padding:5px 2px;
+  background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06);
+  border-radius:8px; padding:5px 2px;
 }
-.fc-dow  { font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:700; color:rgba(255,255,255,.35); text-transform:uppercase; letter-spacing:.5px; }
+.fc-dow  { font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:700; color:rgba(200,210,180,.35); text-transform:uppercase; letter-spacing:.5px; }
 .fc-ico  { font-size:18px; line-height:1.1; }
-.fc-tmp  { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:800; color:#fff; line-height:1; }
-.fc-bar  { width:100%; height:3px; border-radius:2px; background:rgba(255,255,255,.08); overflow:hidden; margin-top:1px; }
-.fc-bar-fill { height:100%; border-radius:2px; background:#6899e8; transition:width .4s; }
+.fc-tmp  { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:800; color:#f0f4e8; line-height:1; }
+.fc-bar  { width:100%; height:3px; border-radius:2px; background:rgba(255,255,255,.07); overflow:hidden; margin-top:1px; }
+.fc-bar-fill { height:100%; border-radius:2px; background:var(--amber); transition:width .4s; }
 
-/* ── MARS MARKET DATA ── */
-#d-mars { margin-top:9px; border-top:1px solid var(--border); padding-top:9px; }
-.mars-label { font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:700; letter-spacing:2px; color:rgba(255,255,255,.28); text-transform:uppercase; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; }
-.mars-date { font-size:7px; color:rgba(255,255,255,.2); letter-spacing:0; font-weight:400; }
-.mars-signal { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:100px; font-family:'Barlow Condensed',sans-serif; font-size:9px; font-weight:800; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
-.mars-entries { display:flex; flex-direction:column; gap:3px; }
-.mars-entry { display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07); border-radius:6px; padding:4px 8px; }
-.mars-origin { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; color:rgba(255,255,255,.7); }
-.mars-price  { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:800; color:#fff; }
-.mars-pkg    { font-size:9px; color:rgba(255,255,255,.3); margin-top:1px; }
-.mars-note   { font-size:10px; color:rgba(255,255,255,.3); font-style:italic; margin-top:4px; }
 /* ── MARS MARKET DATA ── */
 .mars-wrap { margin-top:9px; border-top:1px solid var(--border); padding-top:9px; }
-.mars-label { font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:700; letter-spacing:2px; color:rgba(255,255,255,.28); text-transform:uppercase; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; }
-.mars-date  { font-size:7px; color:rgba(255,255,255,.2); letter-spacing:0; font-weight:400; text-transform:none; }
+.mars-label { font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:700; letter-spacing:2px; color:rgba(200,210,180,.28); text-transform:uppercase; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; }
+.mars-date  { font-size:7px; color:rgba(200,210,180,.2); letter-spacing:0; font-weight:400; text-transform:none; }
+.mars-agg   { font-family:'Barlow Condensed',sans-serif; font-size:15px; font-weight:800; color:#f0f4e8; margin-bottom:3px; }
+.mars-agg-mostly { font-size:10px; color:rgba(200,210,180,.4); margin-bottom:6px; }
 .mars-signal { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:100px; font-family:'Barlow Condensed',sans-serif; font-size:9px; font-weight:800; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
-.mars-entries { display:flex; flex-direction:column; gap:3px; }
-.mars-entry  { display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.07); border-radius:6px; padding:4px 8px; }
-.mars-origin { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; color:rgba(255,255,255,.7); }
-.mars-price  { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:800; color:#fff; }
-.mars-pkg    { font-size:9px; color:rgba(255,255,255,.3); }
-.mars-note   { font-size:10px; color:rgba(255,255,255,.3); font-style:italic; }
+.mars-entries { display:flex; flex-direction:column; gap:3px; margin-top:4px; }
+.mars-entry  { display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,.025); border:1px solid rgba(255,255,255,.06); border-radius:7px; padding:4px 8px; }
+.mars-origin { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; color:rgba(200,210,180,.65); }
+.mars-price  { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:800; color:#f0f4e8; }
+.mars-pkg    { font-size:9px; color:rgba(200,210,180,.28); }
+.mars-note   { font-size:10px; color:rgba(200,210,180,.3); font-style:italic; }
 
 #d-season { margin-top:9px; border-top:1px solid var(--border); padding-top:9px; }
-.sc-label { font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:700; letter-spacing:2px; color:rgba(255,255,255,.28); text-transform:uppercase; margin-bottom:6px; }
+.sc-label { font-family:'Barlow Condensed',sans-serif; font-size:8px; font-weight:700; letter-spacing:2px; color:rgba(200,210,180,.28); text-transform:uppercase; margin-bottom:6px; }
 .sc-wrap { position:relative; height:48px; }
 .sc-bars { display:flex; gap:2px; height:28px; align-items:flex-end; }
 .sc-bar { flex:1; border-radius:2px 2px 0 0; transition:height .3s; }
 .sc-curve { position:absolute; top:0; left:0; right:0; height:28px; pointer-events:none; }
 .sc-months { display:flex; margin-top:3px; }
-.sc-mon { flex:1; font-family:'Barlow Condensed',sans-serif; font-size:7px; font-weight:700; color:rgba(255,255,255,.25); text-align:center; letter-spacing:0; }
-.sc-mon.now { color:var(--green); }
-.leaflet-control-zoom { border:1px solid rgba(255,255,255,.12) !important; background:rgba(4,9,18,.85) !important; }
-.leaflet-control-zoom a { background:transparent !important; color:rgba(255,255,255,.55) !important; border-bottom:1px solid rgba(255,255,255,.1) !important; line-height:26px !important; }
+.sc-mon { flex:1; font-family:'Barlow Condensed',sans-serif; font-size:7px; font-weight:700; color:rgba(200,210,180,.25); text-align:center; letter-spacing:0; }
+.sc-mon.now { color:var(--green); font-weight:800; }
+.leaflet-control-zoom { border:1px solid rgba(200,210,180,.1) !important; background:rgba(6,10,4,.88) !important; }
+.leaflet-control-zoom a { background:transparent !important; color:rgba(255,255,255,.5) !important; border-bottom:1px solid rgba(255,255,255,.08) !important; line-height:26px !important; }
 .leaflet-control-zoom a:hover { color:#fff !important; }
 .leaflet-control-attribution { display:none !important; }
 /* Kill default marker blue dot */
@@ -249,8 +241,8 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
   #detail::before {
     content:'';
     display:block;
-    width:40px; height:4px;
-    background:rgba(255,255,255,.25);
+    width:36px; height:4px;
+    background:rgba(200,210,180,.2);
     border-radius:2px;
     margin:0 auto 10px;
     flex-shrink:0;
@@ -286,7 +278,7 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
 
   /* Top bar tighter */
   #topbar { padding:8px 14px; }
-  #logo-name { font-size:20px; }
+  #logo-img  { height:52px; }
   #logo-sub  { font-size:8px; letter-spacing:2px; }
 
   /* Zoom controls above picker */
@@ -306,8 +298,8 @@ html, body { width:100%; height:100%; overflow:hidden; font-family:'Barlow',sans
 <!-- TOP BAR -->
 <div id="topbar">
   <div>
-    <div id="logo-name">🌿 HarvestScope</div>
-    <div id="logo-sub">Jeffco Produce Origins &amp; Live Weather</div>
+    <img src="/Harvescope%20Logo2.png" alt="HarvestScope" id="logo-img" height="64" style="display:block;object-fit:contain;object-position:left center;">
+    <div id="logo-sub">Produce Origins &amp; Live Weather</div>
   </div>
   <div id="live-badge"><div class="ldot"></div></div>
 </div>
@@ -1014,7 +1006,7 @@ function fillPanel(key) {
 
   const emojiEl = document.getElementById('d-emoji');
   emojiEl.innerHTML = iconImg(key, 40);
-  document.getElementById('d-name').textContent   = p.name.toUpperCase();
+  document.getElementById('d-name').textContent   = p.name;
 
   // Region line — show vendor if override has one
   const regionEl = document.getElementById('d-region');
@@ -1057,11 +1049,11 @@ function fillPanel(key) {
       const pct = Math.round((v / 1.0) * 100);
       const isNow = i === now;
       const barColor = isNow
-        ? `rgba(57,224,122,${0.4 + v * 0.6})`
-        : v >= 0.8 ? `rgba(57,224,122,${0.25 + v * 0.4})`
-        : v >= 0.5 ? `rgba(57,224,122,${0.15 + v * 0.3})`
+        ? `rgba(126,179,58,${0.4 + v * 0.6})`
+        : v >= 0.8 ? `rgba(126,179,58,${0.25 + v * 0.4})`
+        : v >= 0.5 ? `rgba(126,179,58,${0.15 + v * 0.3})`
         : `rgba(255,255,255,${0.05 + v * 0.1})`;
-      return `<div class="sc-bar" style="height:${Math.max(3, pct)}%;background:${barColor};${isNow ? 'box-shadow:0 0 6px rgba(57,224,122,.5)' : ''}"></div>`;
+      return `<div class="sc-bar" style="height:${Math.max(3, pct)}%;background:${barColor};${isNow ? 'box-shadow:0 0 6px rgba(126,179,58,.45)' : ''}"></div>`;
     }).join('');
 
     // Bell curve SVG overlay — smooth gaussian-ish path through the season values
@@ -1092,7 +1084,7 @@ function fillPanel(key) {
       <div class="sc-wrap">
         <div class="sc-bars">${barsHTML}</div>
         <svg class="sc-curve" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="${pathD}" stroke="rgba(57,224,122,0.7)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="${pathD}" stroke="rgba(126,179,58,0.65)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </div>
       <div class="sc-months">${monthsHTML}</div>`;
@@ -1123,7 +1115,7 @@ function fillPanel(key) {
   }
 
   // Fetch MARS market data asynchronously — renders when ready
-  document.getElementById('d-mars').innerHTML = '<div class="mars-wrap"><div class="mars-label"><span>SF Terminal Market</span></div><div class="mars-note">Loading…</div></div>';
+  document.getElementById('d-mars').innerHTML = '<div class="mars-wrap"><div class="mars-label"><span>LA Terminal Market</span></div><div class="mars-note">Loading…</div></div>';
   fetchMars(key).then(data => renderMars(data));
 }
 
@@ -1194,17 +1186,17 @@ function hideDrawer() {
 }
 
 // ══════════════════════════════════════════════════════════
-//  MARS MARKET DATA — SF Terminal via Netlify Function
+//  MARS MARKET DATA — LA Terminal via Vercel Function
 // ══════════════════════════════════════════════════════════
 const marsCache = {};
 
 const SUPPLY_STYLES = {
-  SHORT:    { color:'#f5424e', bg:'rgba(245,66,78,0.15)',   emoji:'🔴', label:'SHORT'    },
-  TIGHT:    { color:'#f5c842', bg:'rgba(245,200,66,0.15)',  emoji:'🟡', label:'TIGHT'    },
-  RISING:   { color:'#f57c42', bg:'rgba(245,124,66,0.15)',  emoji:'📈', label:'RISING'   },
-  NORMAL:   { color:'#39e07a', bg:'rgba(57,224,122,0.12)',  emoji:'🟢', label:'NORMAL'   },
-  DROPPING: { color:'#6899e8', bg:'rgba(104,153,232,0.15)', emoji:'📉', label:'DROPPING' },
-  AMPLE:    { color:'#6899e8', bg:'rgba(104,153,232,0.15)', emoji:'🔵', label:'AMPLE'    },
+  SHORT:    { color:'#d44040', bg:'rgba(212,64,64,0.15)',    emoji:'🔴', label:'SHORT'    },
+  TIGHT:    { color:'#d4973a', bg:'rgba(212,151,58,0.15)',   emoji:'🟡', label:'TIGHT'    },
+  RISING:   { color:'#d4703a', bg:'rgba(212,112,58,0.15)',   emoji:'📈', label:'RISING'   },
+  NORMAL:   { color:'#7eb33a', bg:'rgba(126,179,58,0.14)',   emoji:'🟢', label:'NORMAL'   },
+  DROPPING: { color:'#c8913a', bg:'rgba(200,145,58,0.15)',   emoji:'📉', label:'DROPPING' },
+  AMPLE:    { color:'#5a9fbe', bg:'rgba(90,159,190,0.14)',   emoji:'🔵', label:'AMPLE'    },
 };
 
 async function fetchMars(key) {
@@ -1225,7 +1217,7 @@ function renderMars(data) {
   const el = document.getElementById('d-mars');
   if (!data || !data.entries || !data.entries.length) {
     el.innerHTML = data && data.note
-      ? `<div class="mars-wrap"><div class="mars-label"><span>SF Terminal Market</span></div><div class="mars-note">${data.note}</div></div>`
+      ? `<div class="mars-wrap"><div class="mars-label"><span>LA Terminal Market</span></div><div class="mars-note">${data.note}</div></div>`
       : '';
     return;
   }
@@ -1234,18 +1226,48 @@ function renderMars(data) {
   const dateStr = data.report_date
     ? new Date(data.report_date).toLocaleDateString('en-US',{month:'short',day:'numeric'})
     : '';
+
+  // Aggregate price range across all entries
+  const lows  = data.entries.map(e => e.low).filter(v => v > 0);
+  const highs = data.entries.map(e => e.high > 0 ? e.high : e.low).filter(v => v > 0);
+  const minP = lows.length  ? Math.min(...lows)  : null;
+  const maxP = highs.length ? Math.max(...highs) : null;
+  const aggStr = (minP && maxP && minP !== maxP)
+    ? `$${minP.toFixed(0)}–$${maxP.toFixed(0)}`
+    : minP ? `$${minP.toFixed(0)}` : '–';
+
+  // Mostly range — average across entries that have one
+  const withMostly = data.entries.filter(e => e.mostly_low > 0 && e.mostly_high > 0);
+  let mostlyHTML = '';
+  if (withMostly.length) {
+    const avgLow  = Math.round(withMostly.reduce((a, e) => a + e.mostly_low,  0) / withMostly.length);
+    const avgHigh = Math.round(withMostly.reduce((a, e) => a + e.mostly_high, 0) / withMostly.length);
+    mostlyHTML = `<div class="mars-agg-mostly">Mostly $${avgLow}–$${avgHigh}</div>`;
+  }
+
+  // Individual breakdown — up to 4 entries
   const shown = data.entries.slice(0, 4);
   const entryHTML = shown.map(e => {
-    const priceStr = e.mostly_low && e.mostly_high
-      ? `$${e.mostly_low.toFixed(0)}–$${e.mostly_high.toFixed(0)}`
-      : e.low && e.high ? `$${e.low.toFixed(0)}–$${e.high.toFixed(0)}` : '–';
+    let priceStr;
+    if (e.mostly_low > 0 && e.mostly_high > 0) {
+      priceStr = `$${e.mostly_low.toFixed(0)}–$${e.mostly_high.toFixed(0)}`;
+    } else if (e.high > 0) {
+      priceStr = `$${e.low.toFixed(0)}–$${e.high.toFixed(0)}`;
+    } else if (e.low > 0) {
+      priceStr = `$${e.low.toFixed(0)}`;
+    } else {
+      priceStr = '–';
+    }
     return `<div class="mars-entry">
       <div><div class="mars-origin">${e.origin||'Unknown'}</div><div class="mars-pkg">${e.package||''}</div></div>
       <div class="mars-price">${priceStr}</div>
     </div>`;
   }).join('');
+
   el.innerHTML = `<div class="mars-wrap">
-    <div class="mars-label"><span>SF Terminal Market</span><span class="mars-date">${dateStr}</span></div>
+    <div class="mars-label"><span>LA Terminal Market</span><span class="mars-date">${dateStr}</span></div>
+    <div class="mars-agg">${aggStr}</div>
+    ${mostlyHTML}
     <div class="mars-signal" style="background:${style.bg};color:${style.color};border:1px solid ${style.color}">${style.emoji} ${style.label}</div>
     <div class="mars-entries">${entryHTML}</div>
   </div>`;
