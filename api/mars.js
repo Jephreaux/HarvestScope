@@ -104,13 +104,17 @@ export default async function handler(req, res) {
         headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
       });
 
-      if (!marsRes.ok) continue;
+      if (!marsRes.ok) {
+        const errText = await marsRes.text();
+        console.error(`MARS non-200 for slug ${slug}: status=${marsRes.status} body=${errText.slice(0, 500)}`);
+        continue;
+      }
 
       const json = await marsRes.json();
 
-      // Log raw response on first call to verify field names against live data
+      // Log raw response to verify field names against live data
       console.log(`MARS raw sample for ${mapping.name} (slug ${slug}):`,
-        JSON.stringify((json.results || json.report || [])[0] || {})
+        JSON.stringify((json.results || json.report || json)[0] || json)
       );
 
       const results = json.results || json.report || [];
