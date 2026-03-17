@@ -154,13 +154,12 @@ export default async function handler(req, res) {
       if (!entries.length) continue;
 
       const signals    = entries.map(e => e.supply);
-      const reportDate = entries[0].report_date;
 
       return res.status(200).json({
         commodity:     mapping.name,
         entries,
         supply_signal: overallSignal(signals),
-        report_date:   reportDate,
+        report_date:   entries[0].report_date,
         market:        'Los Angeles Terminal',
       });
 
