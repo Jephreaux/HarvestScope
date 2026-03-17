@@ -1210,7 +1210,7 @@ const SUPPLY_STYLES = {
 async function fetchMars(key) {
   if (marsCache[key]) return marsCache[key];
   try {
-    const res = await fetch(`/.netlify/functions/mars?commodity=${encodeURIComponent(key)}`);
+    const res = await fetch(`/api/mars?commodity=${encodeURIComponent(key)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     marsCache[key] = data;

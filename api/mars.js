@@ -1,11 +1,11 @@
 // ══════════════════════════════════════════════════════════
 //  HarvestScope — MARS API Proxy Function
-//  Netlify serverless function: netlify/functions/mars.js
+//  Vercel serverless function: /api/mars.js
 //  Proxies USDA MyMarketNews MARS API so the key stays
 //  server-side and never appears in the browser.
 //
 //  Usage from app:
-//    /.netlify/functions/mars?commodity=asparagus
+//    /api/mars?commodity=asparagus
 //
 //  Returns JSON:
 //  {
@@ -17,7 +17,7 @@
 //        condition: "STEADY", supply: "NORMAL",
 //        report_date: "2026-03-01" }
 //    ],
-//    supply_signal: "NORMAL",  // overall signal across all entries
+//    supply_signal: "NORMAL",
 //    report_date: "2026-03-01",
 //    market: "San Francisco Terminal"
 //  }
@@ -64,41 +64,33 @@ function parseSupplySignal(condition = '', environment = '') {
 
 // Overall signal priority: SHORT > TIGHT > RISING > NORMAL > DROPPING > AMPLE
 function overallSignal(signals) {
-  if (signals.includes('SHORT'))   return 'SHORT';
-  if (signals.includes('TIGHT'))   return 'TIGHT';
-  if (signals.includes('RISING'))  return 'RISING';
-  if (signals.includes('AMPLE'))   return 'AMPLE';
-  if (signals.includes('DROPPING'))return 'DROPPING';
+  if (signals.includes('SHORT'))    return 'SHORT';
+  if (signals.includes('TIGHT'))    return 'TIGHT';
+  if (signals.includes('RISING'))   return 'RISING';
+  if (signals.includes('AMPLE'))    return 'AMPLE';
+  if (signals.includes('DROPPING')) return 'DROPPING';
   return 'NORMAL';
 }
 
-exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Content-Type': 'application/json',
-  };
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Content-Type', 'application/json');
 
   // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers, body: '' };
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
-  const commodityKey = (event.queryStringParameters || {}).commodity || '';
-  const mapping = COMMODITY_MAP[commodityKey.toLowerCase()];
+  const commodityKey = (req.query.commodity || '').toLowerCase();
+  const mapping = COMMODITY_MAP[commodityKey];
 
   if (!mapping) {
-    return {
-      statusCode: 400, headers,
-      body: JSON.stringify({ error: `Unknown commodity: ${commodityKey}` }),
-    };
+    return res.status(400).json({ error: `Unknown commodity: ${commodityKey}` });
   }
 
   const apiKey = process.env.MARS_API_KEY;
   if (!apiKey) {
-    return {
-      statusCode: 500, headers,
-      body: JSON.stringify({ error: 'MARS_API_KEY not configured' }),
-    };
+    return res.status(500).json({ error: 'MARS_API_KEY not configured' });
   }
 
   // Basic auth: key as username, no password
@@ -108,15 +100,20 @@ exports.handler = async (event) => {
   for (const slug of mapping.slugs) {
     try {
       const url = `${MARS_BASE}/${slug}?q=commodity=${encodeURIComponent(mapping.name)}&lastReports=1`;
-      const res = await fetch(url, {
+      const marsRes = await fetch(url, {
         headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
       });
 
-      if (!res.ok) continue;
+      if (!marsRes.ok) continue;
 
-      const json = await res.json();
+      const json = await marsRes.json();
+
+      // Log raw response on first call to verify field names against live data
+      console.log(`MARS raw sample for ${mapping.name} (slug ${slug}):`,
+        JSON.stringify((json.results || json.report || [])[0] || {})
+      );
+
       const results = json.results || json.report || [];
-
       if (!results.length) continue;
 
       // Parse entries — each row is a package/origin combination
@@ -152,18 +149,14 @@ exports.handler = async (event) => {
       const signals    = entries.map(e => e.supply);
       const reportDate = entries[0].report_date;
 
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          commodity:     mapping.name,
-          entries,
-          supply_signal: overallSignal(signals),
-          report_date:   reportDate,
-          market:        'San Francisco Terminal',
-          slug,
-        }),
-      };
+      return res.status(200).json({
+        commodity:     mapping.name,
+        entries,
+        supply_signal: overallSignal(signals),
+        report_date:   reportDate,
+        market:        'San Francisco Terminal',
+        slug,
+      });
 
     } catch (err) {
       console.error(`MARS fetch error for slug ${slug}:`, err.message);
@@ -172,16 +165,12 @@ exports.handler = async (event) => {
   }
 
   // No data found in any report
-  return {
-    statusCode: 200,
-    headers,
-    body: JSON.stringify({
-      commodity: mapping.name,
-      entries: [],
-      supply_signal: null,
-      report_date: null,
-      market: 'San Francisco Terminal',
-      note: 'No data available — commodity may not be in season or report not yet published today',
-    }),
-  };
-};
+  return res.status(200).json({
+    commodity:     mapping.name,
+    entries:       [],
+    supply_signal: null,
+    report_date:   null,
+    market:        'San Francisco Terminal',
+    note:          'No data available — commodity may not be in season or report not yet published today',
+  });
+}
