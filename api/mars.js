@@ -96,6 +96,8 @@ export default async function handler(req, res) {
   // Basic auth: key as username, no password
   const authHeader = 'Basic ' + Buffer.from(apiKey + ':').toString('base64');
 
+  const _debug = [];
+
   // Try each report slug until we get results
   for (const slug of mapping.slugs) {
     try {
@@ -106,19 +108,21 @@ export default async function handler(req, res) {
 
       if (!marsRes.ok) {
         const errText = await marsRes.text();
-        console.error(`MARS non-200 for slug ${slug}: status=${marsRes.status} body=${errText.slice(0, 500)}`);
+        _debug.push({ slug, status: marsRes.status, error: errText.slice(0, 500) });
         continue;
       }
 
-      const json = await marsRes.json();
+      const rawText = await marsRes.text();
+      let json;
+      try { json = JSON.parse(rawText); } catch(e) {
+        _debug.push({ slug, status: marsRes.status, parseError: e.message, rawSnippet: rawText.slice(0, 500) });
+        continue;
+      }
 
-      // Log raw response to verify field names against live data
-      console.log(`MARS raw sample for ${mapping.name} (slug ${slug}):`,
-        JSON.stringify((json.results || json.report || json)[0] || json)
-      );
+      _debug.push({ slug, status: marsRes.status, rawFirstRow: (json.results || json.report || json)[0] || json });
 
       const results = json.results || json.report || [];
-      if (!results.length) continue;
+      if (!results.length) { _debug.push({ slug, note: 'results array empty' }); continue; }
 
       // Parse entries — each row is a package/origin combination
       const entries = [];
@@ -176,5 +180,6 @@ export default async function handler(req, res) {
     report_date:   null,
     market:        'San Francisco Terminal',
     note:          'No data available — commodity may not be in season or report not yet published today',
+    _debug,
   });
 }
