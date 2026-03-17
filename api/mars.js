@@ -76,6 +76,7 @@ export default async function handler(req, res) {
   }
 
   const authHeader = 'Basic ' + Buffer.from(apiKey + ':').toString('base64');
+  const debugMode = req.query.debug === '1';
 
   for (const slug of mapping.slugs) {
     try {
@@ -93,6 +94,10 @@ export default async function handler(req, res) {
 
       const allRows = json.results || json.report || (Array.isArray(json) ? json : []);
       if (!allRows.length) continue;
+
+      if (debugMode) {
+        return res.status(200).json({ slug, totalRows: allRows.length, firstRow: allRows[0], keys: Object.keys(allRows[0] || {}) });
+      }
 
       // Filter rows to this commodity (case-insensitive, partial match handles plurals)
       const searchName = mapping.name.toLowerCase();
