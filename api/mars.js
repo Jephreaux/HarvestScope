@@ -94,19 +94,17 @@ export default async function handler(req, res) {
       const reportDate = metaRows[0].report_date || metaRows[0].Report_Date;
       if (!reportDate) continue;
 
-      // Step 2: fetch actual price line items — date in path as YYYY-MM-DD
-      const [mm, dd, yyyy] = reportDate.split('/');
-      const datePath = `${yyyy}-${mm}-${dd}`;
-      const dataRes = await fetch(`${MARS_BASE}/${slug}/${datePath}`, {
+      // Step 2: fetch actual price line items from the "report details" sub-resource
+      const dataRes = await fetch(`${MARS_BASE}/${slug}/report%20details?lastReports=1`, {
         headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
       });
 
       if (debugMode) {
         const rawDbg = await dataRes.text();
         let jsonDbg;
-        try { jsonDbg = JSON.parse(rawDbg); } catch(e) { return res.status(200).json({ slug, reportDate, datePath, status: dataRes.status, raw: rawDbg.slice(0, 500) }); }
+        try { jsonDbg = JSON.parse(rawDbg); } catch(e) { return res.status(200).json({ slug, reportDate, status: dataRes.status, raw: rawDbg.slice(0, 500) }); }
         const rows = jsonDbg.results || jsonDbg.report || (Array.isArray(jsonDbg) ? jsonDbg : []);
-        return res.status(200).json({ slug, reportDate, datePath, status: dataRes.status, totalRows: rows.length, samples: rows.slice(0,3).map(r => ({ keys: Object.keys(r), row: r })) });
+        return res.status(200).json({ slug, reportDate, status: dataRes.status, totalRows: rows.length, samples: rows.slice(0,3).map(r => ({ keys: Object.keys(r), row: r })) });
       }
 
       if (!dataRes.ok) continue;
