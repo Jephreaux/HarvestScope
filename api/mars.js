@@ -11,30 +11,29 @@
 const MARS_BASE = 'https://marsapi.ams.usda.gov/services/v1.2/reports';
 
 // Map app produce keys → MARS commodity search names + report slug IDs
-// SF Terminal reports: 2322=Fruit, 2323=Vegetables, 2324=Onions/Potatoes
-// TODO: swap to LA Terminal slugs once confirmed (search MARS for "Los Angeles")
+// LA Terminal reports: 2306=Fruit (HC_FV010), 2307=Vegetables (HC_FV020), 2308=Onions/Potatoes (HC_FV030)
 const COMMODITY_MAP = {
-  avocado:    { name: 'Avocados',     slugs: [2322] },
-  strawberry: { name: 'Strawberries', slugs: [2322] },
-  apple:      { name: 'Apples',       slugs: [2322] },
-  blueberry:  { name: 'Blueberries',  slugs: [2322] },
-  orange:     { name: 'Oranges',      slugs: [2322] },
-  grape:      { name: 'Grapes',       slugs: [2322] },
-  mango:      { name: 'Mangos',       slugs: [2322] },
-  raspberry:  { name: 'Raspberries',  slugs: [2322] },
-  cantaloupe: { name: 'Cantaloupes',  slugs: [2322] },
-  watermelon: { name: 'Watermelons',  slugs: [2322] },
-  tomato:     { name: 'Tomatoes',     slugs: [2323] },
-  lettuce:    { name: 'Lettuce',      slugs: [2323] },
-  broccolini: { name: 'Broccolini',   slugs: [2323] },
-  asparagus:  { name: 'Asparagus',    slugs: [2323] },
-  green_onion:{ name: 'Green Onions', slugs: [2323] },
-  cauliflower:{ name: 'Cauliflower',  slugs: [2323] },
-  mushroom:   { name: 'Mushrooms',    slugs: [2323] },
-  carrot:     { name: 'Carrots',      slugs: [2323] },
-  broccoli:   { name: 'Broccoli',     slugs: [2323] },
-  potato:     { name: 'Potatoes',     slugs: [2324] },
-  onion:      { name: 'Onions',       slugs: [2324] },
+  avocado:    { name: 'Avocados',     slugs: [2306] },
+  strawberry: { name: 'Strawberries', slugs: [2306] },
+  apple:      { name: 'Apples',       slugs: [2306] },
+  blueberry:  { name: 'Blueberries',  slugs: [2306] },
+  orange:     { name: 'Oranges',      slugs: [2306] },
+  grape:      { name: 'Grapes',       slugs: [2306] },
+  mango:      { name: 'Mangos',       slugs: [2306] },
+  raspberry:  { name: 'Raspberries',  slugs: [2306] },
+  cantaloupe: { name: 'Cantaloupes',  slugs: [2306] },
+  watermelon: { name: 'Watermelons',  slugs: [2306] },
+  tomato:     { name: 'Tomatoes',     slugs: [2307] },
+  lettuce:    { name: 'Lettuce',      slugs: [2307] },
+  broccolini: { name: 'Broccolini',   slugs: [2307] },
+  asparagus:  { name: 'Asparagus',    slugs: [2307] },
+  green_onion:{ name: 'Green Onions', slugs: [2307] },
+  cauliflower:{ name: 'Cauliflower',  slugs: [2307] },
+  mushroom:   { name: 'Mushrooms',    slugs: [2307] },
+  carrot:     { name: 'Carrots',      slugs: [2307] },
+  broccoli:   { name: 'Broccoli',     slugs: [2307] },
+  potato:     { name: 'Potatoes',     slugs: [2308] },
+  onion:      { name: 'Onions',       slugs: [2308] },
 };
 
 // Parse supply signal from MARS market_condition / environment text
@@ -77,7 +76,6 @@ export default async function handler(req, res) {
   }
 
   const authHeader = 'Basic ' + Buffer.from(apiKey + ':').toString('base64');
-  const _debug = [];
 
   for (const slug of mapping.slugs) {
     try {
@@ -87,24 +85,13 @@ export default async function handler(req, res) {
         headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
       });
 
-      if (!marsRes.ok) {
-        const errText = await marsRes.text();
-        _debug.push({ slug, status: marsRes.status, error: errText.slice(0, 300) });
-        continue;
-      }
+      if (!marsRes.ok) continue;
 
       const rawText = await marsRes.text();
       let json;
-      try { json = JSON.parse(rawText); } catch (e) {
-        _debug.push({ slug, parseError: e.message, rawSnippet: rawText.slice(0, 300) });
-        continue;
-      }
+      try { json = JSON.parse(rawText); } catch (e) { continue; }
 
       const allRows = json.results || json.report || (Array.isArray(json) ? json : []);
-
-      // Log first row so we can verify field names against live data
-      _debug.push({ slug, status: marsRes.status, totalRows: allRows.length, firstRow: allRows[0] || null });
-
       if (!allRows.length) continue;
 
       // Filter rows to this commodity (case-insensitive, partial match handles plurals)
@@ -117,7 +104,6 @@ export default async function handler(req, res) {
         return rowCommodity.includes(searchName) || searchName.includes(rowCommodity);
       });
 
-      _debug.push({ slug, matchedRows: matched.length });
       if (!matched.length) continue;
 
       // Parse entries — each row is a package/origin combination
@@ -158,12 +144,10 @@ export default async function handler(req, res) {
         entries,
         supply_signal: overallSignal(signals),
         report_date:   reportDate,
-        market:        'San Francisco Terminal',
-        _debug,
+        market:        'Los Angeles Terminal',
       });
 
     } catch (err) {
-      _debug.push({ slug, exception: err.message });
       continue;
     }
   }
@@ -173,8 +157,7 @@ export default async function handler(req, res) {
     entries:       [],
     supply_signal: null,
     report_date:   null,
-    market:        'San Francisco Terminal',
+    market:        'Los Angeles Terminal',
     note:          'No data available',
-    _debug,
   });
 }
